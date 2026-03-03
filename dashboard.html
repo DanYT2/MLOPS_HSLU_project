@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telco Customer Churn MLOps Blueprint</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#f5f5f4', // stone-100
+                        secondary: '#e7e5e4', // stone-200
+                        accent: '#ea580c', // orange-600
+                        textMain: '#1c1917', // stone-900
+                        textSub: '#44403c', // stone-700
+                        cardBg: '#ffffff',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f5f5f4; /* Warm neutral background */
+            color: #1c1917;
+        }
+        
+        /* Chart Container Styling - MANDATORY */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e7e5e4;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #a8a29e;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #78716c;
+        }
+
+        .step-active {
+            border-left: 4px solid #ea580c;
+            background-color: #fff7ed;
+        }
+        .step-inactive {
+            border-left: 4px solid transparent;
+        }
+    </style>
+    
+    <!-- Chosen Palette: Warm Neutrals (Stone) with Orange Accents for energy/alertness -->
+    <!-- Application Structure Plan: 
+         1. Hero Section: Sets the business context and "Why ML?".
+         2. Data Landscape: Visualizes the dataset structure and imbalance using charts to justify the "Evaluation" phase strategy.
+         3. The MLOps Pipeline: The core interactive section. A vertical stepper allows users to walk through the 7 phases. 
+            This focuses the user on one step at a time, preventing information overload.
+         4. Tech Stack: A grid of cards explaining the tools.
+         5. Business ROI Simulator: An interactive calculator to demonstrate the "Additional Considerations" regarding ROI, allowing users to play with cost assumptions.
+         This structure moves from "Why" -> "What" (Data) -> "How" (Pipeline) -> "Value" (ROI).
+    -->
+    <!-- Visualization & Content Choices:
+         - Churn Distribution Donut Chart: Goal -> Inform/Justify. Shows class imbalance visually. Interaction -> Hover for exact counts.
+         - Feature Category Bar Chart: Goal -> Inform. Shows the breadth of data.
+         - Pipeline Stepper: Goal -> Process Flow. Interactive list updates a detail panel. Replaces static text with exploration.
+         - ROI Comparison Chart: Goal -> Impact. Dynamic bar chart updates as user changes inputs. Proves business value.
+         - NO SVG/Mermaid: All icons are Unicode. All charts are Canvas (Chart.js).
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="text-stone-800">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-2xl mr-2">📡</span>
+                    <h1 class="font-bold text-xl tracking-tight text-stone-900">Dan Wanjohi <span class="text-orange-600">AI Project</span></h1>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <button onclick="scrollToSection('context')" class="text-stone-600 hover:text-orange-600 transition">Context</button>
+                    <button onclick="scrollToSection('data')" class="text-stone-600 hover:text-orange-600 transition">Data</button>
+                    <button onclick="scrollToSection('pipeline')" class="text-stone-600 hover:text-orange-600 transition">Pipeline</button>
+                    <button onclick="scrollToSection('challenges')" class="text-stone-600 hover:text-orange-600 transition">Challenges</button>
+                    <button onclick="scrollToSection('roi')" class="text-stone-600 hover:text-orange-600 transition">ROI Calc</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero / Context Section -->
+    <section id="context" class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-stone-200 p-8 md:p-12">
+            <div class="max-w-3xl mx-auto text-center">
+                <h2 class="text-3xl md:text-4xl font-bold text-stone-900 mb-4">Predicting Customer Churn with MLOps</h2>
+                <p class="text-lg text-stone-600 mb-8 leading-relaxed">
+                    Customer churn costs companies billions of dollars annually. Customer acquisition costs 5-25x more than retention. This project builds an end-to-end Machine Learning pipeline to identify at-risk customers before they leave.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+                    <div class="bg-stone-50 p-6 rounded-xl border border-stone-100">
+                        <div class="text-2xl mb-2">🛑</div>
+                        <h3 class="font-semibold text-stone-900">The Problem</h3>
+                        <p class="text-sm text-stone-600 mt-2">Rule-based systems ("tenure < 6 months") fail to capture complex, non-linear behaviors and are hard to scale.</p>
+                    </div>
+                    <div class="bg-stone-50 p-6 rounded-xl border border-stone-100">
+                        <div class="text-2xl mb-2">🤖</div>
+                        <h3 class="font-semibold text-stone-900">The Solution</h3>
+                        <p class="text-sm text-stone-600 mt-2">A production-grade ML pipeline using XGBoost to generate probabilistic churn scores (e.g., "85% Risk").</p>
+                    </div>
+                    <div class="bg-stone-50 p-6 rounded-xl border border-stone-100">
+                        <div class="text-2xl mb-2">⚙️</div>
+                        <h3 class="font-semibold text-stone-900">The Operations</h3>
+                        <p class="text-sm text-stone-600 mt-2">Automated training, testing, and deployment (CI/CD) ensures the model adapts to new data patterns.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Data Landscape Section -->
+    <section id="data" class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold text-stone-900">The Data Landscape</h2>
+            <p class="text-stone-600 mt-2 max-w-3xl">
+                I utilize the IBM Telco Customer Churn dataset (7,043 rows). Understanding the data structure and class imbalance is critical for selecting the right evaluation metrics (Recall & F1-Score) and preprocessing steps.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Feature Buckets -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <h3 class="font-semibold text-lg mb-4 flex items-center"><span class="mr-2">📂</span> Dataset Features</h3>
+                <div class="space-y-4">
+                    <div class="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                        <h4 class="font-medium text-blue-900">1. Demographic</h4>
+                        <p class="text-sm text-blue-700 mt-1">Gender, SeniorCitizen, Partner, Dependents</p>
+                    </div>
+                    <div class="p-4 bg-green-50 rounded-lg border border-green-100">
+                        <h4 class="font-medium text-green-900">2. Account Info</h4>
+                        <p class="text-sm text-green-700 mt-1">Tenure, Contract Type, PaperlessBilling, PaymentMethod, MonthlyCharges, TotalCharges</p>
+                    </div>
+                    <div class="p-4 bg-purple-50 rounded-lg border border-purple-100">
+                        <h4 class="font-medium text-purple-900">3. Services</h4>
+                        <p class="text-sm text-purple-700 mt-1">PhoneService, InternetService, OnlineSecurity, TechSupport, StreamingTV, etc.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Class Imbalance Chart -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200 flex flex-col justify-center">
+                <h3 class="font-semibold text-lg mb-2 text-center">Class Imbalance Analysis</h3>
+                <p class="text-xs text-stone-500 text-center mb-4">Target Variable: `Churn` (Yes/No)</p>
+                <div class="chart-container">
+                    <canvas id="churnChart"></canvas>
+                </div>
+                <div class="mt-4 text-sm text-center bg-yellow-50 text-yellow-800 p-2 rounded">
+                    ⚠️ <strong>Insight:</strong> Only ~26% of users churn. Accuracy is a misleading metric here. We must optimize for <strong>Recall</strong>.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Pipeline Section -->
+    <section id="pipeline" class="bg-stone-900 text-stone-100 py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-10">
+                <h2 class="text-2xl font-bold text-white">The MLOps Architecture</h2>
+                <p class="text-stone-400 mt-2 max-w-3xl">
+                    Follow the lifecycle of the model from raw data to production monitoring. Click each phase to explore the tools and actions involved.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left Column: Stepper Navigation -->
+                <div class="col-span-1 space-y-2">
+                    <!-- Generated dynamically via JS for cleaner code -->
+                    <div id="pipeline-steps"></div>
+                </div>
+
+                <!-- Right Column: Detail View -->
+                <div class="col-span-1 lg:col-span-2">
+                    <div id="pipeline-detail" class="bg-stone-800 rounded-xl p-8 border border-stone-700 h-full shadow-2xl transition-all duration-300">
+                        <!-- Content injected via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Stack Grid -->
+    <section id="stack" class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <h2 class="text-2xl font-bold text-stone-900 mb-8">Technology Stack</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🐍</div>
+                <h4 class="font-bold">Python & Pandas</h4>
+                <p class="text-xs text-stone-500">Processing & Modeling</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🔄</div>
+                <h4 class="font-bold">DVC</h4>
+                <p class="text-xs text-stone-500">Data Version Control</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🧪</div>
+                <h4 class="font-bold">MLflow</h4>
+                <p class="text-xs text-stone-500">Experiment Tracking</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🐙</div>
+                <h4 class="font-bold">GitHub Actions</h4>
+                <p class="text-xs text-stone-500">CI/CD Automation</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">⚡</div>
+                <h4 class="font-bold">FastAPI</h4>
+                <p class="text-xs text-stone-500">Model Serving API</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🐳</div>
+                <h4 class="font-bold">Docker</h4>
+                <p class="text-xs text-stone-500">Containerization</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">📊</div>
+                <h4 class="font-bold">Evidently AI</h4>
+                <p class="text-xs text-stone-500">Drift Monitoring</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🌲</div>
+                <h4 class="font-bold">XGBoost</h4>
+                <p class="text-xs text-stone-500">Gradient Boosting</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Potential Development Challenges Section -->
+    <section id="challenges" class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold text-stone-900">Potential Development Challenges</h2>
+            <p class="text-stone-600 mt-2 max-w-3xl">
+                Building an end-to-end MLOps pipeline for customer churn prediction is not only a technical task, but also an engineering and organisational challenge. 
+                Below are key risks that are likely to appear during development and deployment.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <div class="text-2xl mb-2">🧹</div>
+                <h3 class="font-semibold text-stone-900">Data Quality & Drift</h3>
+                <p class="text-sm text-stone-600 mt-2">
+                    Inconsistent input formats, missing values, and delayed data feeds can break preprocessing pipelines. 
+                    Over time, production data may drift away from the training distribution, degrading model performance.
+                </p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <div class="text-2xl mb-2">🏗️</div>
+                <h3 class="font-semibold text-stone-900">MLOps Infrastructure Complexity</h3>
+                <p class="text-sm text-stone-600 mt-2">
+                    Integrating DVC, MLflow, Docker, FastAPI, and GitHub Actions requires careful environment management, 
+                    secure secrets handling, and consistent configuration across local, CI, and production environments.
+                </p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <div class="text-2xl mb-2">⚖️</div>
+                <h3 class="font-semibold text-stone-900">Metric Alignment</h3>
+                <p class="text-sm text-stone-600 mt-2">
+                    Business stakeholders may initially focus on accuracy, while the model is optimised for Recall and cost-based metrics. 
+                    Aligning KPIs and explaining trade-offs between False Positives and False Negatives is essential.
+                </p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <div class="text-2xl mb-2">🔐</div>
+                <h3 class="font-semibold text-stone-900">Security & Compliance</h3>
+                <p class="text-sm text-stone-600 mt-2">
+                    Handling customer-level data requires secure storage, controlled access to experiment artifacts, 
+                    and compliance with internal governance and privacy regulations.
+                </p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <div class="text-2xl mb-2">🧪</div>
+                <h3 class="font-semibold text-stone-900">Testing & Reliability</h3>
+                <p class="text-sm text-stone-600 mt-2">
+                    Writing robust unit and integration tests for data pipelines, feature transformations, and API endpoints is non-trivial. 
+                    Flaky tests or insufficient coverage can slow down CI/CD and hide critical bugs.
+                </p>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <div class="text-2xl mb-2">🤝</div>
+                <h3 class="font-semibold text-stone-900">Operational Adoption</h3>
+                <p class="text-sm text-stone-600 mt-2">
+                    Even with a strong model, integrating churn scores into existing CRM or retention workflows, 
+                    training teams, and closing the feedback loop between business and data science can be challenging.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROI Calculator Section -->
+    <section id="roi" class="bg-orange-50 py-12 border-t border-orange-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-stone-900">Business Impact & ROI</h2>
+                <p class="text-stone-600 mt-2 max-w-3xl">
+                    Technical metrics aren't enough. Use this simulator to calculate the business value of the ML model compared to a baseline approach. 
+                    Adjust the costs to see how avoiding False Negatives (lost customers) drives value.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Inputs -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-orange-200">
+                    <h3 class="font-bold text-lg mb-4 text-orange-800">Parameters</h3>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-stone-500 uppercase">Customer Base</label>
+                            <input type="number" id="roi-customers" value="10000" class="w-full mt-1 p-2 border border-stone-300 rounded focus:border-orange-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-stone-500 uppercase">Lost Customer Cost (FN)</label>
+                            <input type="number" id="roi-fn-cost" value="1200" class="w-full mt-1 p-2 border border-stone-300 rounded focus:border-orange-500 focus:outline-none">
+                            <p class="text-xs text-stone-400 mt-1">Cost when we fail to predict churn.</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-stone-500 uppercase">Retention Cost (FP)</label>
+                            <input type="number" id="roi-fp-cost" value="50" class="w-full mt-1 p-2 border border-stone-300 rounded focus:border-orange-500 focus:outline-none">
+                            <p class="text-xs text-stone-400 mt-1">Cost of discount given unnecessarily.</p>
+                        </div>
+                        <button id="roi-calculate-btn" class="w-full bg-stone-900 text-white py-2 rounded hover:bg-stone-700 transition">Update Projection</button>
+                    </div>
+                </div>
+
+                <!-- Visualization -->
+                <div class="col-span-1 lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-orange-200">
+                    <h3 class="font-bold text-lg mb-4 text-center">Cost Comparison Projection</h3>
+                    <div class="chart-container">
+                        <canvas id="roiChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-stone-900 text-stone-400 py-8 mt-12">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p>&copy; 2026 HSLU AI MLOps Project. Based on IBM Telco Customer Churn Dataset.</p>
+        </div>
+    </footer>
+
+    <script>
+        // --- Data & State ---
+        const pipelineData = [
+            {
+                id: 1,
+                phase: "Phase 1: Ingestion & Versioning",
+                icon: "📥",
+                action: "Extract raw CSV to `data/raw/`.",
+                component: "DVC (Data Version Control)",
+                details: "DVC initializes a tracking file (`.dvc`) linked to a remote bucket (S3). Git tracks the metadata, ensuring lightweight repo while securing heavy data.",
+                code: "dvc init\ndvc add data/raw/telco_churn.csv\ngit add data/raw/telco_churn.csv.dvc .gitignore\ngit commit -m 'Track raw data'"
+            },
+            {
+                id: 2,
+                phase: "Phase 2: Preprocessing",
+                icon: "🧹",
+                action: "Cleaning, Encoding, Scaling.",
+                component: "Scikit-Learn Pipeline",
+                details: "Convert `TotalCharges` to numeric. Apply One-Hot Encoding to categoricals. Scale `tenure` and `MonthlyCharges` using StandardScaler. Save `preprocessor.pkl` for consistency.",
+                code: "from sklearn.preprocessing import StandardScaler\nscaler = StandardScaler()\ndf['tenure_scaled'] = scaler.fit_transform(df[['tenure']])\njoblib.dump(scaler, 'artifacts/preprocessor.pkl')"
+            },
+            {
+                id: 3,
+                phase: "Phase 3: Training & Tracking",
+                icon: "🏋️",
+                action: "Train Baseline Models (XGBoost).",
+                component: "MLflow",
+                details: "Use `mlflow.start_run()` to log hyperparameters (`max_depth`, `learning_rate`), metrics (Accuracy, F1), and the model artifact itself.",
+                code: "with mlflow.start_run():\n    clf = XGBClassifier(max_depth=5)\n    clf.fit(X_train, y_train)\n    mlflow.log_metric('accuracy', acc)\n    mlflow.xgboost.log_model(clf, 'model')"
+            },
+            {
+                id: 4,
+                phase: "Phase 4: Evaluation",
+                icon: "⚖️",
+                action: "Model Selection.",
+                component: "Model Registry",
+                details: "Due to class imbalance, we prioritize **Recall** (finding churners) over Accuracy. The best model is promoted to 'Staging' in the MLflow Registry.",
+                code: "# Compare runs in MLflow UI\n# Select run_id with highest Recall\nclient.transition_model_version_stage(\n    name='telco-churn-model',\n    version=1,\n    stage='Staging'\n)"
+            },
+            {
+                id: 5,
+                phase: "Phase 5: CI/CD",
+                icon: "🔄",
+                action: "Automated Testing & Build.",
+                component: "GitHub Actions",
+                details: "On push to `main`: 1. Pull data via DVC. 2. Run `pytest` on preprocessing logic. 3. Build Docker image if tests pass.",
+                code: "name: MLOps Pipeline\non: [push]\njobs:\n  build:\n    steps:\n      - uses: actions/checkout@v2\n      - run: dvc pull\n      - run: pytest tests/"
+            },
+            {
+                id: 6,
+                phase: "Phase 6: Serving",
+                icon: "🚀",
+                action: "Deploy REST API.",
+                component: "FastAPI + Docker",
+                details: "Serve the model via a `/predict` endpoint. The Docker container ensures the environment (dependencies in `requirements.txt`) is identical to training.",
+                code: "@app.post('/predict')\ndef predict(data: CustomerData):\n    processed = preprocessor.transform(data)\n    prob = model.predict_proba(processed)\n    return {'churn_probability': prob}"
+            },
+            {
+                id: 7,
+                phase: "Phase 7: Monitoring",
+                icon: "📡",
+                action: "Detect Drift.",
+                component: "Evidently AI",
+                details: "Compare production data streams against the training baseline. Alert if `MonthlyCharges` distribution shifts (Data Drift) or accuracy drops (Concept Drift).",
+                code: "report = Report(metrics=[DataDriftPreset()])\nreport.run(reference_data=train, current_data=prod)\nreport.save_html('drift_report.html')"
+            }
+        ];
+
+        let currentStepId = 1;
+
+        // --- Functions ---
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function renderPipeline() {
+            const stepsContainer = document.getElementById('pipeline-steps');
+            const detailContainer = document.getElementById('pipeline-detail');
+            
+            // Render Steps List
+            stepsContainer.innerHTML = pipelineData.map(step => `
+                <div onclick="updatePipelineDetail(${step.id})" 
+                     class="cursor-pointer p-4 rounded-lg transition duration-200 mb-3 flex items-center
+                     ${step.id === currentStepId ? 'bg-stone-800 border-l-4 border-orange-500 shadow-lg' : 'bg-stone-800/50 hover:bg-stone-800 border-l-4 border-transparent text-stone-400'}">
+                    <span class="text-2xl mr-3">${step.icon}</span>
+                    <div>
+                        <h4 class="font-bold text-sm ${step.id === currentStepId ? 'text-white' : ''}">${step.phase}</h4>
+                        <p class="text-xs text-stone-500">${step.component}</p>
+                    </div>
+                </div>
+            `).join('');
+
+            // Render Detail View
+            const currentStep = pipelineData.find(s => s.id === currentStepId);
+            detailContainer.innerHTML = `
+                <div class="flex items-center mb-6">
+                    <span class="text-4xl mr-4">${currentStep.icon}</span>
+                    <h3 class="text-2xl font-bold text-white">${currentStep.phase}</h3>
+                </div>
+                
+                <div class="grid grid-cols-1 gap-6">
+                    <div class="bg-stone-700/50 p-5 rounded-lg border border-stone-600">
+                        <h4 class="text-orange-400 font-bold uppercase text-xs mb-2 tracking-wider">Action & Component</h4>
+                        <p class="text-lg font-medium text-white mb-1">${currentStep.component}</p>
+                        <p class="text-stone-300 text-sm leading-relaxed">${currentStep.details}</p>
+                    </div>
+
+                    <div class="bg-black/40 p-5 rounded-lg border border-stone-700 font-mono text-sm overflow-x-auto">
+                        <h4 class="text-stone-500 font-bold uppercase text-xs mb-2 tracking-wider">Pseudo-Code / Config</h4>
+                        <pre class="text-green-400 whitespace-pre-wrap">${currentStep.code}</pre>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updatePipelineDetail(id) {
+            currentStepId = id;
+            renderPipeline();
+        }
+
+        // --- Charts ---
+
+        // 1. Churn Imbalance (Donut)
+        function initChurnChart() {
+            const ctx = document.getElementById('churnChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['No Churn (Retained)', 'Yes Churn (Lost)'],
+                    datasets: [{
+                        data: [73.5, 26.5],
+                        backgroundColor: ['#d6d3d1', '#ea580c'], // stone-300, orange-600
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: ${context.raw}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. ROI Chart (Bar)
+        let roiChart;
+
+        function updateRoiChart() {
+            const customers = parseFloat(document.getElementById('roi-customers').value) || 10000;
+            const fnCost = parseFloat(document.getElementById('roi-fn-cost').value) || 1200;
+            const fpCost = parseFloat(document.getElementById('roi-fp-cost').value) || 50;
+
+            // Assumptions for simulation
+            // Baseline: 50% Recall (Random guess / simple rule)
+            // ML Model: 80% Recall, but slightly higher False Positive rate
+            
+            const churnRate = 0.265;
+            const totalChurners = customers * churnRate;
+            const totalNonChurners = customers * (1 - churnRate);
+
+            // Baseline (Rule Based) - Poor precision/recall
+            const baseRecall = 0.50; // We catch 50% of churners
+            const baseFN = totalChurners * (1 - baseRecall);
+            const baseFP = totalNonChurners * 0.20; // High false alarm rate
+            const baseCost = (baseFN * fnCost) + (baseFP * fpCost);
+
+            // ML Model - Good precision/recall
+            const mlRecall = 0.80; // We catch 80% of churners
+            const mlFN = totalChurners * (1 - mlRecall);
+            const mlFP = totalNonChurners * 0.15; // Better precision
+            const mlCost = (mlFN * fnCost) + (mlFP * fpCost);
+
+            const data = {
+                labels: ['Baseline (Rule-Based)', 'ML Pipeline'],
+                datasets: [{
+                    label: 'Total Estimated Loss ($)',
+                    data: [baseCost, mlCost],
+                    backgroundColor: ['#78716c', '#ea580c'], // stone-500, orange-600
+                    borderRadius: 6
+                }]
+            };
+
+            if (roiChart) {
+                roiChart.data = data;
+                roiChart.update();
+            } else {
+                const ctx = document.getElementById('roiChart').getContext('2d');
+                roiChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'Estimated Cost ($)' }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return ` $${context.raw.toLocaleString()}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // --- Initialization ---
+        window.onload = function() {
+            renderPipeline();
+            initChurnChart();
+            updateRoiChart();
+
+            document.getElementById('roi-calculate-btn').addEventListener('click', updateRoiChart);
+        };
+
+    </script>
+</body>
+</html>
