@@ -7,9 +7,11 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.135.1",
     "ipykernel>=7.2.0",
+    "joblib>=1.4.2",
     "lightgbm>=4.6.0",
     "mlflow>=3.10.0",
     "optuna>=4.7.0",
+    "ruff>=0.15.5",
     "seaborn>=0.13.2",
     "xgboost>=3.2.0",
 ]
