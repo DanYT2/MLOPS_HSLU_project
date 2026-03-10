@@ -14,3 +14,4 @@ mlruns_test/
 .DS_Store
 
 *.db
+*.joblib
