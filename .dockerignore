@@ -1,0 +1,16 @@
+.venv/
+.git/
+.ruff_cache/
+__pycache__/
+*.py[oc]
+*.db
+*.joblib
+*.egg-info
+build/
+dist/
+wheels/
+mlruns/
+mlruns_test/
+dataset/
+project/dataset/
+.DS_Store

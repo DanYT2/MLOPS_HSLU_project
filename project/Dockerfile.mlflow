@@ -1,0 +1,18 @@
+FROM python:3.13-slim
+
+# RUN pip install --no-cache-dir uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+RUN uv pip install mlflow --system --no-cache
+
+WORKDIR /mlflow
+
+EXPOSE 5001
+
+CMD [ \
+    "mlflow", "server", \
+    "--host", "0.0.0.0", \
+    "--port", "5001", \
+    "--backend-store-uri", "sqlite:///mlflow.db", \
+    "--default-artifact-root", "/mlflow/mlruns" \
+]
