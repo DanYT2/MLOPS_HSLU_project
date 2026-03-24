@@ -17,7 +17,6 @@ Steps:
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
 
@@ -1185,7 +1184,7 @@ def main() -> None:
     print(f"\n{'='*60}")
     print("  Pipeline complete!")
     print(f"  Run ID : {run_id}")
-    print(f"  mlflow ui --port 5000")
+    print("  mlflow ui --port 5000")
     print(f"{'='*60}")
 
 
