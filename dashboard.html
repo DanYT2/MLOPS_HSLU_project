@@ -6,6 +6,12 @@
     <title>Telco Customer Churn MLOps Blueprint</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Highlight.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/dockerfile.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
@@ -83,6 +89,54 @@
         .mlflow-tab-panel.active { display: block; }
         .code-tab { cursor: pointer; transition: all 0.2s; }
         .code-tab.active { background: #111827; color: #4ade80; }
+
+        /* Highlight.js integration */
+        .code-block pre code.hljs,
+        [id^="codepanel-"] pre code.hljs,
+        .pipeline-code code.hljs {
+            background: transparent !important;
+            padding: 0 !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 0.75rem !important;
+            line-height: 1.6 !important;
+        }
+        .code-block pre, [id^="codepanel-"] pre { position: relative; }
+
+        /* Copy button */
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: rgba(55, 65, 81, 0.8);
+            color: #9ca3af;
+            border: 1px solid #4b5563;
+            border-radius: 0.375rem;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.65rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            z-index: 10;
+        }
+        .copy-btn:hover { background: #4b5563; color: #e5e7eb; }
+        .copy-btn.copied { background: #065f46; color: #6ee7b7; border-color: #059669; }
+
+        /* Sortable table headers */
+        .sort-th { cursor: pointer; -webkit-user-select: none; user-select: none; transition: color 0.2s; }
+        .sort-th:hover { color: #ea580c; }
+
+        /* API demo preset buttons */
+        .preset-btn {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.7rem;
+            border-radius: 9999px;
+            border: 1px solid #4b5563;
+            background: transparent;
+            color: #d1d5db;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover { border-color: #ea580c; color: #fb923c; }
     </style>
 </head>
 <body class="text-stone-800">
@@ -261,15 +315,15 @@
                         <tr class="border-b-2 border-stone-200 bg-stone-50">
                             <th class="text-left py-3 px-3 font-semibold text-stone-700">Run ID</th>
                             <th class="text-left py-3 px-3 font-semibold text-stone-700">Experiment</th>
-                            <th class="text-left py-3 px-3 font-semibold text-stone-700">Date</th>
-                            <th class="text-right py-3 px-3 font-semibold text-stone-700">LGBM AUC</th>
-                            <th class="text-right py-3 px-3 font-semibold text-stone-700">XGB AUC</th>
-                            <th class="text-right py-3 px-3 font-semibold text-stone-700">LGBM F1</th>
-                            <th class="text-right py-3 px-3 font-semibold text-stone-700">XGB F1</th>
+                            <th class="text-left py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(2)" title="Click to sort">Date</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(3)" title="Click to sort">LGBM AUC</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(4)" title="Click to sort">XGB AUC</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(5)" title="Click to sort">LGBM F1</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(6)" title="Click to sort">XGB F1</th>
                             <th class="text-center py-3 px-3 font-semibold text-stone-700">Status</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="runs-tbody">
                         <tr class="border-b border-stone-100 hover:bg-stone-50">
                             <td class="py-3 px-3 font-mono text-xs">3239ab24</td>
                             <td class="py-3 px-3">Exp #1</td>
@@ -341,9 +395,9 @@
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <h3 class="font-semibold text-lg mb-3">Experiment Tracking Code</h3>
                 <p class="text-sm text-stone-600 mb-3">From <code class="bg-stone-100 px-1 rounded text-xs">project/train.py</code> &mdash; MLflow parent + nested runs:</p>
-                <div class="code-block">
+                    <div class="code-block">
                     <div class="code-block-header">project/train.py &mdash; train_ensemble()</div>
-                    <pre>mlflow.set_experiment("Customer_Churn_Prediction")
+                    <pre><code class="language-python">mlflow.set_experiment("Customer_Churn_Prediction")
 
 mlflow.start_run(run_name="Customer_Churn_Ensemble")
 mlflow.log_param("dataset_train_rows", X.shape[0])
@@ -375,7 +429,7 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
 
 # Aggregate metrics on parent run
 mlflow.log_metric("lgbm_mean_cv_auc", np.mean(lgb_aucs))
-mlflow.log_metric("xgb_mean_cv_auc", np.mean(xgb_aucs))</pre>
+mlflow.log_metric("xgb_mean_cv_auc", np.mean(xgb_aucs))</code></pre>
                 </div>
             </div>
         </div>
@@ -502,7 +556,7 @@ mlflow.log_metric("xgb_mean_cv_auc", np.mean(xgb_aucs))</pre>
                     <p class="text-sm text-stone-400 mb-3">Custom <code class="text-orange-400 text-xs">mlflow.pyfunc.PythonModel</code> that loads all 10 fold models and averages predictions:</p>
                     <div class="code-block">
                         <div class="code-block-header">project/train.py &mdash; ChurnEnsembleModel</div>
-                        <pre>class ChurnEnsembleModel(mlflow.pyfunc.PythonModel):
+                        <pre><code class="language-python">class ChurnEnsembleModel(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context):
         self.lgb_models = [
@@ -529,7 +583,7 @@ mlflow.log_metric("xgb_mean_cv_auc", np.mean(xgb_aucs))</pre>
             [m.predict_proba(arr)[:, 1]
              for m in self.xgb_models], axis=0
         )
-        return (lgb_probs + xgb_probs) / 2</pre>
+        return (lgb_probs + xgb_probs) / 2</code></pre>
                     </div>
                 </div>
                 <div>
@@ -537,7 +591,7 @@ mlflow.log_metric("xgb_mean_cv_auc", np.mean(xgb_aucs))</pre>
                     <p class="text-sm text-stone-400 mb-3">After training, the ensemble is logged as a pyfunc artifact and registered with a <code class="text-orange-400 text-xs">champion</code> alias:</p>
                     <div class="code-block">
                         <div class="code-block-header">project/train.py &mdash; register_model()</div>
-                        <pre>REGISTERED_MODEL_NAME = "CustomerChurnEnsemble"
+                        <pre><code class="language-python">REGISTERED_MODEL_NAME = "CustomerChurnEnsemble"
 
 # Log the pyfunc model with all fold artifacts
 model_info = mlflow.pyfunc.log_model(
@@ -564,7 +618,7 @@ client.set_registered_model_alias(
     version=registered.version,
 )
 # Output: Registered CustomerChurnEnsemble v2
-#         with alias 'champion'</pre>
+#         with alias 'champion'</code></pre>
                     </div>
                 </div>
             </div>
@@ -897,7 +951,7 @@ client.set_registered_model_alias(
                     </div>
 
                     <div id="codepanel-web_service" class="mlflow-tab-panel active">
-                        <pre class="p-4 text-xs text-green-400 font-mono overflow-x-auto max-h-[420px]">@asynccontextmanager
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-python">@asynccontextmanager
 async def lifespan(app: FastAPI):
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
     if tracking_uri:
@@ -934,11 +988,11 @@ def model_info():
         "model_uri": f"models:/{REGISTERED_MODEL_NAME}@champion",
         "run_id": getattr(meta, "run_id", None),
         "flavors": list(getattr(meta, "flavors", {}).keys()),
-    }</pre>
+    }</code></pre>
                     </div>
 
                     <div id="codepanel-schemas" class="mlflow-tab-panel">
-                        <pre class="p-4 text-xs text-green-400 font-mono overflow-x-auto max-h-[420px]">from pydantic import BaseModel, Field
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-python">from pydantic import BaseModel, Field
 from typing import Literal
 
 class YesNo(str, Enum):
@@ -980,11 +1034,11 @@ class PredictionResponse(BaseModel):
     churn: bool
 
 class BatchPredictionResponse(BaseModel):
-    predictions: list[PredictionResponse]</pre>
+    predictions: list[PredictionResponse]</code></pre>
                     </div>
 
                     <div id="codepanel-compose" class="mlflow-tab-panel">
-                        <pre class="p-4 text-xs text-green-400 font-mono overflow-x-auto max-h-[420px]">services:
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-yaml">services:
   api:
     build:
       context: ..
@@ -1006,11 +1060,11 @@ class BatchPredictionResponse(BaseModel):
       - "5001:5001"
     volumes:
       - ./mlflow.db:/mlflow/mlflow.db
-      - ./mlruns:/mlflow/mlruns</pre>
+      - ./mlruns:/mlflow/mlruns</code></pre>
                     </div>
 
                     <div id="codepanel-dockerfile_api" class="mlflow-tab-panel">
-                        <pre class="p-4 text-xs text-green-400 font-mono overflow-x-auto max-h-[420px]">FROM python:3.13-slim
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-dockerfile">FROM python:3.13-slim
 
 RUN apt-get update \
     &amp;&amp; apt-get install -y --no-install-recommends libgomp1 \
@@ -1033,11 +1087,11 @@ COPY project/schemas/ ./schemas/
 EXPOSE 8000
 
 CMD ["uv", "run", "fastapi", "run", "web_service.py", \
-     "--host", "0.0.0.0", "--port", "8000"]</pre>
+     "--host", "0.0.0.0", "--port", "8000"]</code></pre>
                     </div>
 
                     <div id="codepanel-dockerfile_mlflow" class="mlflow-tab-panel">
-                        <pre class="p-4 text-xs text-green-400 font-mono overflow-x-auto max-h-[420px]">FROM python:3.13-slim
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-dockerfile">FROM python:3.13-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -1056,7 +1110,7 @@ CMD [ \
     "--serve-artifacts", \
     "--allowed-hosts", \
         "mlflow,mlflow:5001,localhost,localhost:5001" \
-]</pre>
+]</code></pre>
                     </div>
                 </div>
             </div>
@@ -1070,6 +1124,12 @@ CMD [ \
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs text-stone-400 font-semibold uppercase">Request Body</span>
                             <span class="bg-blue-900 text-blue-300 text-xs px-2 py-0.5 rounded font-mono">POST /predict</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 mb-3">
+                            <span class="text-xs text-stone-500">Presets:</span>
+                            <button onclick="loadPreset('low')" class="preset-btn" title="Loyal, long-tenure customer">Low Risk</button>
+                            <button onclick="loadPreset('medium')" class="preset-btn" title="Mid-tenure, one-year contract">Medium Risk</button>
+                            <button onclick="loadPreset('high')" class="preset-btn" title="New, month-to-month, fiber optic">High Risk</button>
                         </div>
                         <textarea id="api-request" class="w-full h-80 font-mono text-xs p-4 bg-gray-900 text-green-400 rounded-lg border border-gray-700 resize-none focus:border-orange-500 focus:outline-none">{
   "SeniorCitizen": 0,
@@ -1348,16 +1408,18 @@ CMD [ \
                         <p class="text-lg font-medium text-white mb-1">${s.component}</p>
                         <p class="text-stone-300 text-sm leading-relaxed">${s.details}</p>
                     </div>
-                    <div class="bg-black/40 p-5 rounded-lg border border-stone-700 font-mono text-sm overflow-x-auto">
+                    <div class="bg-black/40 p-5 rounded-lg border border-stone-700 overflow-x-auto pipeline-code">
                         <h4 class="text-stone-500 font-bold uppercase text-xs mb-2 tracking-wider">Code</h4>
-                        <pre class="text-green-400 whitespace-pre-wrap">${s.code}</pre>
+                        <pre style="background:transparent;margin:0;padding:0;"><code class="language-python" style="font-size:0.8rem;line-height:1.6;">${s.code}</code></pre>
                     </div>
                 </div>`;
+            highlightPipelineCode();
         }
 
         function updatePipelineDetail(id) {
             currentStepId = id;
             renderPipeline();
+            highlightPipelineCode();
         }
 
         // ── Charts ───────────────────────────────────────────────
@@ -1462,30 +1524,145 @@ CMD [ \
             const responseDiv = document.getElementById('api-response');
             const statusEl = document.getElementById('api-status');
 
-            try {
-                const data = JSON.parse(textarea.value);
-                let prob = 0.12;
-                if (data.Contract === "Month-to-month") prob += 0.32;
-                if ((data.tenure || 0) < 12) prob += 0.14;
-                else if ((data.tenure || 0) < 24) prob += 0.05;
-                if (data.InternetService === "Fiber optic") prob += 0.10;
-                if (data.OnlineSecurity === "No" || data.OnlineSecurity === "No internet service") prob += 0.05;
-                if (data.TechSupport === "No" || data.TechSupport === "No internet service") prob += 0.05;
-                if ((data.MonthlyCharges || 0) > 70) prob += 0.06;
-                if (data.PaperlessBilling === "Yes") prob += 0.03;
-                prob = Math.min(Math.max(prob, 0.01), 0.97);
-                prob = Math.round(prob * 1000000) / 1000000;
+            statusEl.textContent = 'Sending...';
+            statusEl.className = 'text-xs text-yellow-400 font-mono';
+            responseDiv.innerHTML = '<span class="text-stone-500">Processing request...</span>';
 
-                statusEl.textContent = '200 OK';
-                statusEl.className = 'text-xs text-green-400 font-mono';
-                responseDiv.innerHTML =
-                    '<span class="text-gray-500">HTTP/1.1 200 OK</span>\n' +
-                    '<span class="text-gray-500">content-type: application/json</span>\n\n' +
-                    JSON.stringify({ churn_probability: prob, churn: prob >= 0.5 }, null, 2);
-            } catch (e) {
-                statusEl.textContent = '400 Bad Request';
-                statusEl.className = 'text-xs text-red-400 font-mono';
-                responseDiv.innerHTML = '<span class="text-red-400">Error: Invalid JSON</span>\n' + e.message;
+            setTimeout(() => {
+                try {
+                    const data = JSON.parse(textarea.value);
+                    let prob = 0.12;
+                    if (data.Contract === "Month-to-month") prob += 0.32;
+                    if ((data.tenure || 0) < 12) prob += 0.14;
+                    else if ((data.tenure || 0) < 24) prob += 0.05;
+                    if (data.InternetService === "Fiber optic") prob += 0.10;
+                    if (data.OnlineSecurity === "No" || data.OnlineSecurity === "No internet service") prob += 0.05;
+                    if (data.TechSupport === "No" || data.TechSupport === "No internet service") prob += 0.05;
+                    if ((data.MonthlyCharges || 0) > 70) prob += 0.06;
+                    if (data.PaperlessBilling === "Yes") prob += 0.03;
+                    prob = Math.min(Math.max(prob, 0.01), 0.97);
+                    prob = Math.round(prob * 1000000) / 1000000;
+
+                    const riskLevel = prob >= 0.5 ? 'HIGH' : prob >= 0.3 ? 'MEDIUM' : 'LOW';
+                    const riskColor = prob >= 0.5 ? '#ef4444' : prob >= 0.3 ? '#f59e0b' : '#22c55e';
+
+                    statusEl.textContent = '200 OK';
+                    statusEl.className = 'text-xs text-green-400 font-mono';
+                    const json = JSON.stringify({ churn_probability: prob, churn: prob >= 0.5 }, null, 2);
+                    responseDiv.innerHTML =
+                        '<span class="text-gray-500">HTTP/1.1 200 OK</span>\n' +
+                        '<span class="text-gray-500">content-type: application/json</span>\n\n' +
+                        json +
+                        '\n\n<span class="text-gray-500">──────────────────────────</span>\n' +
+                        `<span style="color:${riskColor}; font-weight:bold;">Risk Level: ${riskLevel}</span>\n` +
+                        `<span class="text-gray-400">Probability: ${(prob * 100).toFixed(2)}%</span>\n` +
+                        `<span class="text-gray-400">Action: ${prob >= 0.5 ? 'Trigger retention campaign' : prob >= 0.3 ? 'Monitor closely' : 'No action needed'}</span>`;
+                } catch (e) {
+                    statusEl.textContent = '400 Bad Request';
+                    statusEl.className = 'text-xs text-red-400 font-mono';
+                    responseDiv.innerHTML = '<span class="text-red-400">Error: Invalid JSON</span>\n' + e.message;
+                }
+            }, 400);
+        }
+
+        // ── API Demo Presets ─────────────────────────────────────
+        const apiPresets = {
+            low: {
+                SeniorCitizen: 0, Partner: "Yes", Dependents: "Yes", tenure: 60,
+                PhoneService: "Yes", MultipleLines: "Yes", InternetService: "DSL",
+                OnlineSecurity: "Yes", OnlineBackup: "Yes", DeviceProtection: "Yes",
+                TechSupport: "Yes", StreamingTV: "Yes", StreamingMovies: "No",
+                Contract: "Two year", PaperlessBilling: "No",
+                PaymentMethod: "Bank transfer (automatic)",
+                MonthlyCharges: 85.50, TotalCharges: 5130.00
+            },
+            medium: {
+                SeniorCitizen: 0, Partner: "Yes", Dependents: "No", tenure: 24,
+                PhoneService: "Yes", MultipleLines: "No", InternetService: "DSL",
+                OnlineSecurity: "No", OnlineBackup: "Yes", DeviceProtection: "No",
+                TechSupport: "No", StreamingTV: "Yes", StreamingMovies: "No",
+                Contract: "One year", PaperlessBilling: "Yes",
+                PaymentMethod: "Mailed check",
+                MonthlyCharges: 65.20, TotalCharges: 1564.80
+            },
+            high: {
+                SeniorCitizen: 1, Partner: "No", Dependents: "No", tenure: 3,
+                PhoneService: "Yes", MultipleLines: "No", InternetService: "Fiber optic",
+                OnlineSecurity: "No", OnlineBackup: "No", DeviceProtection: "No",
+                TechSupport: "No", StreamingTV: "No", StreamingMovies: "No",
+                Contract: "Month-to-month", PaperlessBilling: "Yes",
+                PaymentMethod: "Electronic check",
+                MonthlyCharges: 75.10, TotalCharges: 225.30
+            }
+        };
+
+        function loadPreset(type) {
+            document.getElementById('api-request').value = JSON.stringify(apiPresets[type], null, 2);
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.style.borderColor = '');
+            event.target.style.borderColor = '#ea580c';
+            simulateApiCall();
+        }
+
+        // ── Sortable Runs Table ──────────────────────────────────
+        let sortDirection = {};
+        function sortRunsTable(colIdx) {
+            const tbody = document.getElementById('runs-tbody');
+            if (!tbody) return;
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const dir = sortDirection[colIdx] === 'asc' ? 'desc' : 'asc';
+            sortDirection = {};
+            sortDirection[colIdx] = dir;
+
+            document.querySelectorAll('.sort-th').forEach(th => {
+                th.classList.remove('text-orange-600');
+            });
+            event.target.classList.add('text-orange-600');
+
+            rows.sort((a, b) => {
+                const cellA = a.cells[colIdx]?.textContent.trim() || '';
+                const cellB = b.cells[colIdx]?.textContent.trim() || '';
+                const numA = parseFloat(cellA);
+                const numB = parseFloat(cellB);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return dir === 'asc' ? numA - numB : numB - numA;
+                }
+                return dir === 'asc' ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+            });
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // ── Copy-to-Clipboard Buttons ────────────────────────────
+        function addCopyButtons() {
+            document.querySelectorAll('.code-block pre, [id^="codepanel-"] pre').forEach(pre => {
+                if (pre.querySelector('.copy-btn')) return;
+                const btn = document.createElement('button');
+                btn.className = 'copy-btn';
+                btn.textContent = 'Copy';
+                btn.addEventListener('click', () => {
+                    const code = pre.querySelector('code')?.textContent || pre.textContent;
+                    navigator.clipboard.writeText(code).then(() => {
+                        btn.textContent = 'Copied!';
+                        btn.classList.add('copied');
+                        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+                    });
+                });
+                pre.style.position = 'relative';
+                pre.appendChild(btn);
+            });
+        }
+
+        // ── Syntax Highlighting ──────────────────────────────────
+        function applyHighlighting() {
+            document.querySelectorAll('.code-block pre code, [id^="codepanel-"] pre code').forEach(el => {
+                hljs.highlightElement(el);
+            });
+        }
+
+        function highlightPipelineCode() {
+            const codeEl = document.querySelector('#pipeline-detail pre code');
+            if (codeEl) {
+                delete codeEl.dataset.highlighted;
+                hljs.highlightElement(codeEl);
             }
         }
 
@@ -1497,6 +1674,9 @@ CMD [ \
             initRadarChart();
             updateRoiChart();
             document.getElementById('roi-calculate-btn').addEventListener('click', updateRoiChart);
+
+            applyHighlighting();
+            addCopyButtons();
         };
     </script>
 </body>
