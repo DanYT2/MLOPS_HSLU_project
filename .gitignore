@@ -15,3 +15,5 @@ mlruns_test/
 
 *.db
 *.joblib
+
+.env
