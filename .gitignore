@@ -12,3 +12,8 @@ dataset/
 mlruns/
 mlruns_test/
 .DS_Store
+
+*.db
+*.joblib
+
+.env

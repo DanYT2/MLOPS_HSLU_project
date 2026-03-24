@@ -1,0 +1,25 @@
+FROM python:3.13-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /app
+
+# Install dependencies first (cached layer)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+# Copy application code only
+COPY project/web_service.py ./
+COPY project/schemas/ ./schemas/
+
+EXPOSE 8000
+
+CMD ["uv", "run", "fastapi", "run", "web_service.py", "--host", "0.0.0.0", "--port", "8000"]

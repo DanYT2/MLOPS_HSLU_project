@@ -4,27 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Telco Customer Churn MLOps Blueprint</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Fonts -->
+    <!-- Highlight.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/dockerfile.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        primary: '#f5f5f4', // stone-100
-                        secondary: '#e7e5e4', // stone-200
-                        accent: '#ea580c', // orange-600
-                        textMain: '#1c1917', // stone-900
-                        textSub: '#44403c', // stone-700
+                        primary: '#f5f5f4',
+                        secondary: '#e7e5e4',
+                        accent: '#ea580c',
+                        textMain: '#1c1917',
+                        textSub: '#44403c',
                         cardBg: '#ffffff',
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
                     }
                 }
             }
@@ -34,11 +39,9 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f5f5f4; /* Warm neutral background */
+            background-color: #f5f5f4;
             color: #1c1917;
         }
-        
-        /* Chart Container Styling - MANDATORY */
         .chart-container {
             position: relative;
             width: 100%;
@@ -49,53 +52,92 @@
             max-height: 400px;
         }
         @media (min-width: 768px) {
-            .chart-container {
-                height: 350px;
-            }
+            .chart-container { height: 350px; }
         }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #e7e5e4; }
+        ::-webkit-scrollbar-thumb { background: #a8a29e; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #78716c; }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
+        .code-block {
+            background: #111827;
+            border-radius: 0.5rem;
+            border: 1px solid #374151;
+            overflow: hidden;
         }
-        ::-webkit-scrollbar-track {
-            background: #e7e5e4;
+        .code-block-header {
+            background: #1f2937;
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            font-family: 'JetBrains Mono', monospace;
+            border-bottom: 1px solid #374151;
         }
-        ::-webkit-scrollbar-thumb {
-            background: #a8a29e;
-            border-radius: 4px;
+        .code-block pre {
+            padding: 1rem;
+            font-size: 0.75rem;
+            color: #4ade80;
+            font-family: 'JetBrains Mono', monospace;
+            overflow-x: auto;
+            max-height: 400px;
+            line-height: 1.6;
+            margin: 0;
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #78716c;
-        }
+        .mlflow-tab { cursor: pointer; transition: all 0.2s; }
+        .mlflow-tab.active { color: #0194e2; border-bottom-color: #0194e2; background: white; }
+        .mlflow-tab-panel { display: none; }
+        .mlflow-tab-panel.active { display: block; }
+        .code-tab { cursor: pointer; transition: all 0.2s; }
+        .code-tab.active { background: #111827; color: #4ade80; }
 
-        .step-active {
-            border-left: 4px solid #ea580c;
-            background-color: #fff7ed;
+        /* Highlight.js integration */
+        .code-block pre code.hljs,
+        [id^="codepanel-"] pre code.hljs,
+        .pipeline-code code.hljs {
+            background: transparent !important;
+            padding: 0 !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 0.75rem !important;
+            line-height: 1.6 !important;
         }
-        .step-inactive {
-            border-left: 4px solid transparent;
+        .code-block pre, [id^="codepanel-"] pre { position: relative; }
+
+        /* Copy button */
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: rgba(55, 65, 81, 0.8);
+            color: #9ca3af;
+            border: 1px solid #4b5563;
+            border-radius: 0.375rem;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.65rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            z-index: 10;
         }
+        .copy-btn:hover { background: #4b5563; color: #e5e7eb; }
+        .copy-btn.copied { background: #065f46; color: #6ee7b7; border-color: #059669; }
+
+        /* Sortable table headers */
+        .sort-th { cursor: pointer; -webkit-user-select: none; user-select: none; transition: color 0.2s; }
+        .sort-th:hover { color: #ea580c; }
+
+        /* API demo preset buttons */
+        .preset-btn {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.7rem;
+            border-radius: 9999px;
+            border: 1px solid #4b5563;
+            background: transparent;
+            color: #d1d5db;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover { border-color: #ea580c; color: #fb923c; }
     </style>
-    
-    <!-- Chosen Palette: Warm Neutrals (Stone) with Orange Accents for energy/alertness -->
-    <!-- Application Structure Plan: 
-         1. Hero Section: Sets the business context and "Why ML?".
-         2. Data Landscape: Visualizes the dataset structure and imbalance using charts to justify the "Evaluation" phase strategy.
-         3. The MLOps Pipeline: The core interactive section. A vertical stepper allows users to walk through the 7 phases. 
-            This focuses the user on one step at a time, preventing information overload.
-         4. Tech Stack: A grid of cards explaining the tools.
-         5. Business ROI Simulator: An interactive calculator to demonstrate the "Additional Considerations" regarding ROI, allowing users to play with cost assumptions.
-         This structure moves from "Why" -> "What" (Data) -> "How" (Pipeline) -> "Value" (ROI).
-    -->
-    <!-- Visualization & Content Choices:
-         - Churn Distribution Donut Chart: Goal -> Inform/Justify. Shows class imbalance visually. Interaction -> Hover for exact counts.
-         - Feature Category Bar Chart: Goal -> Inform. Shows the breadth of data.
-         - Pipeline Stepper: Goal -> Process Flow. Interactive list updates a detail panel. Replaces static text with exploration.
-         - ROI Comparison Chart: Goal -> Impact. Dynamic bar chart updates as user changes inputs. Proves business value.
-         - NO SVG/Mermaid: All icons are Unicode. All charts are Canvas (Chart.js).
-    -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 </head>
 <body class="text-stone-800">
 
@@ -107,12 +149,16 @@
                     <span class="text-2xl mr-2">📡</span>
                     <h1 class="font-bold text-xl tracking-tight text-stone-900">Dan Wanjohi <span class="text-orange-600">AI Project</span></h1>
                 </div>
-                <div class="hidden md:flex items-center space-x-8">
+                <div class="hidden lg:flex items-center space-x-3 text-sm">
                     <button onclick="scrollToSection('context')" class="text-stone-600 hover:text-orange-600 transition">Context</button>
                     <button onclick="scrollToSection('data')" class="text-stone-600 hover:text-orange-600 transition">Data</button>
                     <button onclick="scrollToSection('pipeline')" class="text-stone-600 hover:text-orange-600 transition">Pipeline</button>
-                    <button onclick="scrollToSection('challenges')" class="text-stone-600 hover:text-orange-600 transition">Challenges</button>
-                    <button onclick="scrollToSection('roi')" class="text-stone-600 hover:text-orange-600 transition">ROI Calc</button>
+                    <button onclick="scrollToSection('experiments')" class="text-stone-600 hover:text-orange-600 transition font-medium">Experiments</button>
+                    <button onclick="scrollToSection('bestmodel')" class="text-stone-600 hover:text-orange-600 transition font-medium">Model</button>
+                    <button onclick="scrollToSection('mlflowui')" class="text-stone-600 hover:text-orange-600 transition font-medium">MLflow UI</button>
+                    <button onclick="scrollToSection('deployment')" class="text-stone-600 hover:text-orange-600 transition font-medium">Deployment</button>
+                    <button onclick="scrollToSection('repo')" class="text-stone-600 hover:text-orange-600 transition font-medium">Repository</button>
+                    <button onclick="scrollToSection('roi')" class="text-stone-600 hover:text-orange-600 transition">ROI</button>
                 </div>
             </div>
         </div>
@@ -130,17 +176,17 @@
                     <div class="bg-stone-50 p-6 rounded-xl border border-stone-100">
                         <div class="text-2xl mb-2">🛑</div>
                         <h3 class="font-semibold text-stone-900">The Problem</h3>
-                        <p class="text-sm text-stone-600 mt-2">Rule-based systems ("tenure < 6 months") fail to capture complex, non-linear behaviors and are hard to scale.</p>
+                        <p class="text-sm text-stone-600 mt-2">Rule-based systems fail to capture complex, non-linear behaviors and are hard to scale.</p>
                     </div>
                     <div class="bg-stone-50 p-6 rounded-xl border border-stone-100">
                         <div class="text-2xl mb-2">🤖</div>
                         <h3 class="font-semibold text-stone-900">The Solution</h3>
-                        <p class="text-sm text-stone-600 mt-2">A production-grade ML pipeline using XGBoost to generate probabilistic churn scores (e.g., "85% Risk").</p>
+                        <p class="text-sm text-stone-600 mt-2">A production-grade ML pipeline using LightGBM + XGBoost ensemble to generate probabilistic churn scores.</p>
                     </div>
                     <div class="bg-stone-50 p-6 rounded-xl border border-stone-100">
                         <div class="text-2xl mb-2">⚙️</div>
                         <h3 class="font-semibold text-stone-900">The Operations</h3>
-                        <p class="text-sm text-stone-600 mt-2">Automated training, testing, and deployment (CI/CD) ensures the model adapts to new data patterns.</p>
+                        <p class="text-sm text-stone-600 mt-2">MLflow tracking, Docker containers, and FastAPI serving ensure reproducibility and easy deployment.</p>
                     </div>
                 </div>
             </div>
@@ -152,12 +198,10 @@
         <div class="mb-8">
             <h2 class="text-2xl font-bold text-stone-900">The Data Landscape</h2>
             <p class="text-stone-600 mt-2 max-w-3xl">
-                I utilize the IBM Telco Customer Churn dataset (7,043 rows). Understanding the data structure and class imbalance is critical for selecting the right evaluation metrics (Recall & F1-Score) and preprocessing steps.
+                I utilize the IBM Telco Customer Churn dataset (7,043 rows). Understanding the data structure and class imbalance is critical for selecting the right evaluation metrics (Recall &amp; F1-Score) and preprocessing steps.
             </p>
         </div>
-
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Feature Buckets -->
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <h3 class="font-semibold text-lg mb-4 flex items-center"><span class="mr-2">📂</span> Dataset Features</h3>
                 <div class="space-y-4">
@@ -175,16 +219,14 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Class Imbalance Chart -->
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200 flex flex-col justify-center">
                 <h3 class="font-semibold text-lg mb-2 text-center">Class Imbalance Analysis</h3>
-                <p class="text-xs text-stone-500 text-center mb-4">Target Variable: `Churn` (Yes/No)</p>
+                <p class="text-xs text-stone-500 text-center mb-4">Target Variable: <code>Churn</code> (Yes/No)</p>
                 <div class="chart-container">
                     <canvas id="churnChart"></canvas>
                 </div>
                 <div class="mt-4 text-sm text-center bg-yellow-50 text-yellow-800 p-2 rounded">
-                    ⚠️ <strong>Insight:</strong> Only ~26% of users churn. Accuracy is a misleading metric here. We must optimize for <strong>Recall</strong>.
+                    <strong>Insight:</strong> Only ~26% of users churn. Accuracy is misleading here. We optimize for <strong>Recall</strong>.
                 </div>
             </div>
         </div>
@@ -199,18 +241,562 @@
                     Follow the lifecycle of the model from raw data to production monitoring. Click each phase to explore the tools and actions involved.
                 </p>
             </div>
-
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <!-- Left Column: Stepper Navigation -->
                 <div class="col-span-1 space-y-2">
-                    <!-- Generated dynamically via JS for cleaner code -->
                     <div id="pipeline-steps"></div>
                 </div>
-
-                <!-- Right Column: Detail View -->
                 <div class="col-span-1 lg:col-span-2">
-                    <div id="pipeline-detail" class="bg-stone-800 rounded-xl p-8 border border-stone-700 h-full shadow-2xl transition-all duration-300">
-                        <!-- Content injected via JS -->
+                    <div id="pipeline-detail" class="bg-stone-800 rounded-xl p-8 border border-stone-700 h-full shadow-2xl transition-all duration-300"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- SECTION: MLflow Experiment Tracking                                 -->
+    <!-- ================================================================== -->
+    <section id="experiments" class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold text-stone-900">MLflow Experiment Tracking</h2>
+            <p class="text-stone-600 mt-2 max-w-3xl">
+                All training runs are tracked with MLflow via a centralized tracking server (Docker, port 5001). Below are the actual experiments and runs recorded in the project's MLflow database, demonstrating systematic experiment management across multiple iterations.
+            </p>
+        </div>
+
+        <!-- Experiments Table -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200 mb-8">
+            <h3 class="font-semibold text-lg mb-4 flex items-center"><span class="mr-2">🧪</span> Registered Experiments</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b-2 border-stone-200 bg-stone-50">
+                            <th class="text-left py-3 px-4 font-semibold text-stone-700">ID</th>
+                            <th class="text-left py-3 px-4 font-semibold text-stone-700">Experiment Name</th>
+                            <th class="text-center py-3 px-4 font-semibold text-stone-700">Parent Runs</th>
+                            <th class="text-center py-3 px-4 font-semibold text-stone-700">Total Runs</th>
+                            <th class="text-center py-3 px-4 font-semibold text-stone-700">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-stone-100 hover:bg-stone-50 transition">
+                            <td class="py-3 px-4 font-mono text-xs">0</td>
+                            <td class="py-3 px-4 text-stone-500">Default</td>
+                            <td class="py-3 px-4 text-center">0</td>
+                            <td class="py-3 px-4 text-center">0</td>
+                            <td class="py-3 px-4 text-center"><span class="bg-stone-100 text-stone-600 text-xs px-2 py-1 rounded-full">Empty</span></td>
+                        </tr>
+                        <tr class="border-b border-stone-100 hover:bg-stone-50 transition">
+                            <td class="py-3 px-4 font-mono text-xs">1</td>
+                            <td class="py-3 px-4">Customer_Churn_Prediction_20260303</td>
+                            <td class="py-3 px-4 text-center font-semibold">1</td>
+                            <td class="py-3 px-4 text-center">11</td>
+                            <td class="py-3 px-4 text-center"><span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Active</span></td>
+                        </tr>
+                        <tr class="border-b border-stone-100 hover:bg-orange-50 transition">
+                            <td class="py-3 px-4 font-mono text-xs font-bold">2</td>
+                            <td class="py-3 px-4 font-semibold text-orange-700">Customer_Churn_Prediction</td>
+                            <td class="py-3 px-4 text-center font-bold text-orange-700">4</td>
+                            <td class="py-3 px-4 text-center font-bold text-orange-700">44</td>
+                            <td class="py-3 px-4 text-center"><span class="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">Primary</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-xs text-stone-500 mt-3">Data extracted from <code class="bg-stone-100 px-1 rounded">project/mlflow.db</code> (SQLite backend store)</p>
+        </div>
+
+        <!-- Runs Comparison Table -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200 mb-8">
+            <h3 class="font-semibold text-lg mb-2 flex items-center"><span class="mr-2">📊</span> Parent Ensemble Runs (5 Total)</h3>
+            <p class="text-sm text-stone-500 mb-4">Each parent run spawns 10 nested child runs (5 LightGBM folds + 5 XGBoost folds) via <code class="bg-stone-100 px-1 rounded text-xs">mlflow.start_run(nested=True)</code></p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b-2 border-stone-200 bg-stone-50">
+                            <th class="text-left py-3 px-3 font-semibold text-stone-700">Run ID</th>
+                            <th class="text-left py-3 px-3 font-semibold text-stone-700">Experiment</th>
+                            <th class="text-left py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(2)" title="Click to sort">Date</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(3)" title="Click to sort">LGBM AUC</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(4)" title="Click to sort">XGB AUC</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(5)" title="Click to sort">LGBM F1</th>
+                            <th class="text-right py-3 px-3 font-semibold text-stone-700 sort-th" onclick="sortRunsTable(6)" title="Click to sort">XGB F1</th>
+                            <th class="text-center py-3 px-3 font-semibold text-stone-700">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runs-tbody">
+                        <tr class="border-b border-stone-100 hover:bg-stone-50">
+                            <td class="py-3 px-3 font-mono text-xs">3239ab24</td>
+                            <td class="py-3 px-3">Exp #1</td>
+                            <td class="py-3 px-3 whitespace-nowrap">2026-03-03</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9167</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9166</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6771</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6772</td>
+                            <td class="py-3 px-3 text-center"><span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">FINISHED</span></td>
+                        </tr>
+                        <tr class="border-b border-stone-100 hover:bg-stone-50 bg-stone-50/50">
+                            <td class="py-3 px-3 font-mono text-xs">e30ceea6</td>
+                            <td class="py-3 px-3">Exp #2</td>
+                            <td class="py-3 px-3 whitespace-nowrap">2026-03-03</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9168</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9167</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6772</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6772</td>
+                            <td class="py-3 px-3 text-center"><span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">FINISHED</span></td>
+                        </tr>
+                        <tr class="border-b border-stone-100 hover:bg-stone-50">
+                            <td class="py-3 px-3 font-mono text-xs">89caed73</td>
+                            <td class="py-3 px-3">Exp #2</td>
+                            <td class="py-3 px-3 whitespace-nowrap">2026-03-10</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9168</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9168</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6774</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6774</td>
+                            <td class="py-3 px-3 text-center"><span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">FINISHED</span></td>
+                        </tr>
+                        <tr class="border-b border-stone-100 hover:bg-stone-50 bg-stone-50/50">
+                            <td class="py-3 px-3 font-mono text-xs">60671fb5</td>
+                            <td class="py-3 px-3">Exp #2</td>
+                            <td class="py-3 px-3 whitespace-nowrap">2026-03-23</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9167</td>
+                            <td class="py-3 px-3 text-right font-mono">0.9165</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6776</td>
+                            <td class="py-3 px-3 text-right font-mono">0.6764</td>
+                            <td class="py-3 px-3 text-center"><span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">v1 Registered</span></td>
+                        </tr>
+                        <tr class="border-b border-stone-100 bg-orange-50 hover:bg-orange-100">
+                            <td class="py-3 px-3 font-mono text-xs font-bold text-orange-800">69de7df6</td>
+                            <td class="py-3 px-3 font-semibold">Exp #2</td>
+                            <td class="py-3 px-3 whitespace-nowrap font-semibold">2026-03-23</td>
+                            <td class="py-3 px-3 text-right font-mono font-bold text-orange-800">0.9168</td>
+                            <td class="py-3 px-3 text-right font-mono font-bold text-orange-800">0.9167</td>
+                            <td class="py-3 px-3 text-right font-mono font-bold text-orange-800">0.6774</td>
+                            <td class="py-3 px-3 text-right font-mono font-bold text-orange-800">0.6770</td>
+                            <td class="py-3 px-3 text-center"><span class="bg-orange-200 text-orange-900 text-xs px-2 py-0.5 rounded-full font-bold">v2 Champion</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-3 flex items-center gap-2 text-sm text-orange-700 bg-orange-50 p-3 rounded-lg border border-orange-200">
+                <span class="text-lg">🏆</span>
+                Highlighted row = Champion model (registered as <code class="bg-orange-100 px-1 rounded font-mono text-xs">CustomerChurnEnsemble v2</code> with alias <code class="bg-orange-100 px-1 rounded font-mono text-xs">champion</code>)
+            </div>
+        </div>
+
+        <!-- Per-fold Chart + Code -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <h3 class="font-semibold text-lg mb-2 text-center">Per-Fold Validation AUC (Champion Run)</h3>
+                <p class="text-xs text-stone-500 text-center mb-4">5-Fold Stratified CV &mdash; LightGBM vs XGBoost</p>
+                <div class="chart-container">
+                    <canvas id="foldAucChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <h3 class="font-semibold text-lg mb-3">Experiment Tracking Code</h3>
+                <p class="text-sm text-stone-600 mb-3">From <code class="bg-stone-100 px-1 rounded text-xs">project/train.py</code> &mdash; MLflow parent + nested runs:</p>
+                    <div class="code-block">
+                    <div class="code-block-header">project/train.py &mdash; train_ensemble()</div>
+                    <pre><code class="language-python">mlflow.set_experiment("Customer_Churn_Prediction")
+
+mlflow.start_run(run_name="Customer_Churn_Ensemble")
+mlflow.log_param("dataset_train_rows", X.shape[0])
+mlflow.log_param("cv_n_splits", N_SPLITS)
+mlflow.set_tag("ensemble_method", "simple_average")
+mlflow.set_tag("models_used", "LightGBM, XGBoost")
+
+for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+
+    # LightGBM nested run
+    with mlflow.start_run(
+        run_name=f"LightGBM_Fold_{fold+1}", nested=True
+    ):
+        lgb_model = LGBMClassifier(**best_lgbm_params)
+        lgb_model.fit(X_train_fold, y_train_fold)
+        mlflow.log_metric("val_auc", roc_auc_score(...))
+        mlflow.log_metric("val_f1", f1_score(...))
+        mlflow.log_figure(fig, f"lgbm_cm_fold_{fold+1}.png")
+        mlflow.lightgbm.log_model(lgb_model, ...)
+
+    # XGBoost nested run
+    with mlflow.start_run(
+        run_name=f"XGBoost_Fold_{fold+1}", nested=True
+    ):
+        xgb_model = XGBClassifier(**best_xgb_params)
+        xgb_model.fit(X_train_fold, y_train_fold)
+        mlflow.log_metric("val_auc", roc_auc_score(...))
+        mlflow.xgboost.log_model(xgb_model, ...)
+
+# Aggregate metrics on parent run
+mlflow.log_metric("lgbm_mean_cv_auc", np.mean(lgb_aucs))
+mlflow.log_metric("xgb_mean_cv_auc", np.mean(xgb_aucs))</code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- SECTION: Best Model & Registry                                      -->
+    <!-- ================================================================== -->
+    <section id="bestmodel" class="bg-stone-900 text-stone-100 py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-10">
+                <h2 class="text-2xl font-bold text-white">Best Model &amp; Registry</h2>
+                <p class="text-stone-400 mt-2 max-w-3xl">
+                    The best-performing ensemble is registered in the MLflow Model Registry as <code class="text-orange-400">CustomerChurnEnsemble</code> and tagged with the <code class="text-orange-400">champion</code> alias for production deployment.
+                </p>
+            </div>
+
+            <!-- Model Card + Radar Chart -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+                <!-- Model Card -->
+                <div class="bg-stone-800 rounded-xl p-6 border border-stone-700">
+                    <div class="flex items-center mb-6">
+                        <span class="text-3xl mr-3">🏆</span>
+                        <div>
+                            <h3 class="text-xl font-bold text-white">CustomerChurnEnsemble</h3>
+                            <p class="text-sm text-stone-400">Version 2 &bull; Alias: <span class="text-orange-400 font-semibold">champion</span></p>
+                        </div>
+                    </div>
+                    <div class="space-y-3 mb-6">
+                        <div class="flex justify-between text-sm"><span class="text-stone-400">Architecture</span><span class="text-white">LightGBM + XGBoost (5-fold CV, simple average)</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-stone-400">Python Model</span><span class="text-white font-mono text-xs">mlflow.pyfunc.PythonModel</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-stone-400">Sub-models</span><span class="text-white">5 LGBM + 5 XGB (joblib-serialized)</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-stone-400">Features</span><span class="text-white">31 (after one-hot encoding)</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-stone-400">Train Rows</span><span class="text-white">594,194</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-stone-400">Source Run</span><span class="text-white font-mono text-xs">69de7df6</span></div>
+                    </div>
+                    <h4 class="text-orange-400 font-bold uppercase text-xs mb-3 tracking-wider">Champion Metrics (Mean CV)</h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-stone-700/50 p-3 rounded-lg text-center">
+                            <div class="text-xs text-stone-400">LGBM AUC</div>
+                            <div class="text-xl font-bold text-white">0.9168</div>
+                        </div>
+                        <div class="bg-stone-700/50 p-3 rounded-lg text-center">
+                            <div class="text-xs text-stone-400">XGB AUC</div>
+                            <div class="text-xl font-bold text-white">0.9167</div>
+                        </div>
+                        <div class="bg-stone-700/50 p-3 rounded-lg text-center">
+                            <div class="text-xs text-stone-400">LGBM Accuracy</div>
+                            <div class="text-lg font-bold text-white">86.19%</div>
+                        </div>
+                        <div class="bg-stone-700/50 p-3 rounded-lg text-center">
+                            <div class="text-xs text-stone-400">XGB Accuracy</div>
+                            <div class="text-lg font-bold text-white">86.19%</div>
+                        </div>
+                        <div class="bg-stone-700/50 p-3 rounded-lg text-center">
+                            <div class="text-xs text-stone-400">LGBM Recall</div>
+                            <div class="text-lg font-bold text-orange-400">64.37%</div>
+                        </div>
+                        <div class="bg-stone-700/50 p-3 rounded-lg text-center">
+                            <div class="text-xs text-stone-400">XGB Recall</div>
+                            <div class="text-lg font-bold text-orange-400">64.26%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Radar Chart -->
+                <div class="bg-stone-800 rounded-xl p-6 border border-stone-700 flex flex-col">
+                    <h3 class="font-semibold text-lg mb-2 text-center text-white">LightGBM vs XGBoost Comparison</h3>
+                    <p class="text-xs text-stone-500 text-center mb-4">Champion Run &mdash; Mean CV Metrics</p>
+                    <div class="chart-container flex-1">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hyperparameters -->
+            <div class="bg-stone-800 rounded-xl p-6 border border-stone-700 mb-10">
+                <h3 class="font-semibold text-lg mb-4 text-white flex items-center"><span class="mr-2">⚙️</span> Optuna-Tuned Hyperparameters</h3>
+                <p class="text-sm text-stone-400 mb-4">Optimized via Optuna with ROC-AUC as the objective function. Stored in <code class="text-orange-400 text-xs">project/models/best_params.json</code></p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-orange-400 font-bold uppercase text-xs mb-3 tracking-wider">LightGBM</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <tbody class="text-stone-300">
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">n_estimators</td><td class="py-2 text-right font-mono">1,867</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">learning_rate</td><td class="py-2 text-right font-mono">0.0392</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">num_leaves</td><td class="py-2 text-right font-mono">25</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">max_depth</td><td class="py-2 text-right font-mono">8</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">min_child_samples</td><td class="py-2 text-right font-mono">38</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">subsample</td><td class="py-2 text-right font-mono">0.894</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">colsample_bytree</td><td class="py-2 text-right font-mono">0.429</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">reg_alpha</td><td class="py-2 text-right font-mono">2.377</td></tr>
+                                    <tr><td class="py-2 text-stone-400">reg_lambda</td><td class="py-2 text-right font-mono">0.264</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-orange-400 font-bold uppercase text-xs mb-3 tracking-wider">XGBoost</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <tbody class="text-stone-300">
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">n_estimators</td><td class="py-2 text-right font-mono">1,075</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">learning_rate</td><td class="py-2 text-right font-mono">0.0294</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">max_depth</td><td class="py-2 text-right font-mono">6</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">subsample</td><td class="py-2 text-right font-mono">0.645</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">colsample_bytree</td><td class="py-2 text-right font-mono">0.843</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">gamma</td><td class="py-2 text-right font-mono">1.091</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">reg_alpha</td><td class="py-2 text-right font-mono">1.484</td></tr>
+                                    <tr class="border-b border-stone-700"><td class="py-2 text-stone-400">reg_lambda</td><td class="py-2 text-right font-mono">0.017</td></tr>
+                                    <tr><td class="py-2 text-stone-400">eval_metric</td><td class="py-2 text-right font-mono">auc</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pyfunc + Registration Code -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="font-semibold text-lg mb-3 text-white">Ensemble PyFunc Wrapper</h3>
+                    <p class="text-sm text-stone-400 mb-3">Custom <code class="text-orange-400 text-xs">mlflow.pyfunc.PythonModel</code> that loads all 10 fold models and averages predictions:</p>
+                    <div class="code-block">
+                        <div class="code-block-header">project/train.py &mdash; ChurnEnsembleModel</div>
+                        <pre><code class="language-python">class ChurnEnsembleModel(mlflow.pyfunc.PythonModel):
+
+    def load_context(self, context):
+        self.lgb_models = [
+            joblib.load(context.artifacts[f"lgbm_fold_{i}"])
+            for i in range(1, 6)
+        ]
+        self.xgb_models = [
+            joblib.load(context.artifacts[f"xgb_fold_{i}"])
+            for i in range(1, 6)
+        ]
+        with open(context.artifacts["feature_list"]) as f:
+            self.feature_list = json.load(f)
+
+    def predict(self, context, model_input, params=None):
+        df = model_input.reindex(
+            columns=self.feature_list, fill_value=0
+        )
+        arr = df.values
+        lgb_probs = np.mean(
+            [m.predict_proba(arr)[:, 1]
+             for m in self.lgb_models], axis=0
+        )
+        xgb_probs = np.mean(
+            [m.predict_proba(arr)[:, 1]
+             for m in self.xgb_models], axis=0
+        )
+        return (lgb_probs + xgb_probs) / 2</code></pre>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg mb-3 text-white">Model Registration</h3>
+                    <p class="text-sm text-stone-400 mb-3">After training, the ensemble is logged as a pyfunc artifact and registered with a <code class="text-orange-400 text-xs">champion</code> alias:</p>
+                    <div class="code-block">
+                        <div class="code-block-header">project/train.py &mdash; register_model()</div>
+                        <pre><code class="language-python">REGISTERED_MODEL_NAME = "CustomerChurnEnsemble"
+
+# Log the pyfunc model with all fold artifacts
+model_info = mlflow.pyfunc.log_model(
+    name="ensemble_model",
+    python_model=ChurnEnsembleModel(),
+    artifacts={
+        "lgbm_fold_1": lgbm_path_1,
+        # ... 5 LGBM + 5 XGB + feature_list.json
+        "feature_list": fl_path,
+    },
+)
+
+# Register in the Model Registry
+registered = mlflow.register_model(
+    model_uri=model_info.model_uri,
+    name=REGISTERED_MODEL_NAME,
+)
+
+# Set the champion alias for serving
+client = mlflow.tracking.MlflowClient()
+client.set_registered_model_alias(
+    name=REGISTERED_MODEL_NAME,
+    alias="champion",
+    version=registered.version,
+)
+# Output: Registered CustomerChurnEnsemble v2
+#         with alias 'champion'</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- SECTION: MLflow UI Showcase                                         -->
+    <!-- ================================================================== -->
+    <section id="mlflowui" class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold text-stone-900">MLflow UI</h2>
+            <p class="text-stone-600 mt-2 max-w-3xl">
+                The MLflow server runs at <code class="bg-stone-100 px-1 rounded text-sm">http://localhost:5001</code> via Docker. Below is a replica of the MLflow UI showing the actual experiment data, run history, and model registry as they appear in the live interface.
+            </p>
+        </div>
+
+        <!-- MLflow UI Replica -->
+        <div class="rounded-xl overflow-hidden border border-stone-300 shadow-lg">
+            <!-- MLflow Header Bar -->
+            <div class="bg-[#0194e2] text-white px-6 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="font-bold text-lg tracking-tight">MLflow</span>
+                    <span class="text-xs bg-white/20 px-2 py-0.5 rounded">v3.10</span>
+                </div>
+                <span class="text-xs text-white/70">Tracking Server: http://localhost:5001</span>
+            </div>
+
+            <!-- Tab Bar -->
+            <div class="bg-gray-50 border-b border-gray-200 flex">
+                <button onclick="switchMlflowTab('experiments')" class="mlflow-tab active px-6 py-3 text-sm font-medium border-b-2 border-transparent" data-tab="experiments">Experiments</button>
+                <button onclick="switchMlflowTab('runs')" class="mlflow-tab px-6 py-3 text-sm font-medium border-b-2 border-transparent" data-tab="runs">Runs</button>
+                <button onclick="switchMlflowTab('models')" class="mlflow-tab px-6 py-3 text-sm font-medium border-b-2 border-transparent" data-tab="models">Models</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="bg-white p-6 min-h-[340px]">
+                <!-- Experiments Tab -->
+                <div id="mlflow-panel-experiments" class="mlflow-tab-panel active">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="font-semibold text-gray-800">All Experiments</h4>
+                        <span class="text-xs text-gray-500">3 experiments</span>
+                    </div>
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 text-left">
+                                <th class="py-2 px-3 text-gray-500 font-medium text-xs uppercase">Name</th>
+                                <th class="py-2 px-3 text-gray-500 font-medium text-xs uppercase">ID</th>
+                                <th class="py-2 px-3 text-gray-500 font-medium text-xs uppercase text-center">Runs</th>
+                                <th class="py-2 px-3 text-gray-500 font-medium text-xs uppercase">Lifecycle</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer">
+                                <td class="py-3 px-3 text-blue-600 font-medium">Default</td>
+                                <td class="py-3 px-3 font-mono text-xs text-gray-500">0</td>
+                                <td class="py-3 px-3 text-center text-gray-400">0</td>
+                                <td class="py-3 px-3"><span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">active</span></td>
+                            </tr>
+                            <tr class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer">
+                                <td class="py-3 px-3 text-blue-600 font-medium">Customer_Churn_Prediction_20260303</td>
+                                <td class="py-3 px-3 font-mono text-xs text-gray-500">1</td>
+                                <td class="py-3 px-3 text-center font-semibold">11</td>
+                                <td class="py-3 px-3"><span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">active</span></td>
+                            </tr>
+                            <tr class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer bg-blue-50/50">
+                                <td class="py-3 px-3 text-blue-600 font-bold">Customer_Churn_Prediction</td>
+                                <td class="py-3 px-3 font-mono text-xs text-gray-500">2</td>
+                                <td class="py-3 px-3 text-center font-bold">44</td>
+                                <td class="py-3 px-3"><span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">active</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Runs Tab -->
+                <div id="mlflow-panel-runs" class="mlflow-tab-panel">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="font-semibold text-gray-800">Experiment: Customer_Churn_Prediction <span class="text-xs text-gray-400 font-normal">(showing parent runs only)</span></h4>
+                        <span class="text-xs text-gray-500">4 parent runs + 40 nested</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gray-200 text-left">
+                                    <th class="py-2 px-2 text-gray-500 font-medium text-xs uppercase">Status</th>
+                                    <th class="py-2 px-2 text-gray-500 font-medium text-xs uppercase">Run Name</th>
+                                    <th class="py-2 px-2 text-gray-500 font-medium text-xs uppercase">Created</th>
+                                    <th class="py-2 px-2 text-gray-500 font-medium text-xs uppercase text-right">lgbm_mean_cv_auc</th>
+                                    <th class="py-2 px-2 text-gray-500 font-medium text-xs uppercase text-right">xgb_mean_cv_auc</th>
+                                    <th class="py-2 px-2 text-gray-500 font-medium text-xs uppercase text-right">lgbm_mean_cv_f1</th>
+                                    <th class="py-2 px-2 text-gray-500 font-medium text-xs uppercase text-right">lgbm_mean_cv_recall</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer bg-orange-50">
+                                    <td class="py-3 px-2"><span class="inline-block w-3 h-3 bg-green-500 rounded-full"></span></td>
+                                    <td class="py-3 px-2 text-blue-600 font-medium">Customer_Churn_Ensemble</td>
+                                    <td class="py-3 px-2 text-gray-500 text-xs">2026-03-23 21:37</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs font-bold">0.916800</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.916663</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.677424</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.643663</td>
+                                </tr>
+                                <tr class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer">
+                                    <td class="py-3 px-2"><span class="inline-block w-3 h-3 bg-green-500 rounded-full"></span></td>
+                                    <td class="py-3 px-2 text-blue-600 font-medium">Customer_Churn_Ensemble</td>
+                                    <td class="py-3 px-2 text-gray-500 text-xs">2026-03-23 19:17</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.916710</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.916531</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.677596</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.643184</td>
+                                </tr>
+                                <tr class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer">
+                                    <td class="py-3 px-2"><span class="inline-block w-3 h-3 bg-green-500 rounded-full"></span></td>
+                                    <td class="py-3 px-2 text-blue-600 font-medium">Customer_Churn_Ensemble</td>
+                                    <td class="py-3 px-2 text-gray-500 text-xs">2026-03-10 00:14</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.916787</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.916780</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.677434</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.643020</td>
+                                </tr>
+                                <tr class="border-b border-gray-100 hover:bg-blue-50 cursor-pointer">
+                                    <td class="py-3 px-2"><span class="inline-block w-3 h-3 bg-green-500 rounded-full"></span></td>
+                                    <td class="py-3 px-2 text-blue-600 font-medium">Customer_Churn_Ensemble</td>
+                                    <td class="py-3 px-2 text-gray-500 text-xs">2026-03-03 20:29</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.916781</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.916742</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.677225</td>
+                                    <td class="py-3 px-2 text-right font-mono text-xs">0.642803</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">Orange-highlighted row = latest run that produced champion model v2</p>
+                </div>
+
+                <!-- Models Tab -->
+                <div id="mlflow-panel-models" class="mlflow-tab-panel">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="font-semibold text-gray-800">Registered Models</h4>
+                        <span class="text-xs text-gray-500">1 model, 2 versions</span>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg overflow-hidden mb-6">
+                        <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                            <div class="flex items-center gap-2">
+                                <span class="text-blue-600 font-bold">CustomerChurnEnsemble</span>
+                                <span class="bg-orange-100 text-orange-800 text-xs px-2 py-0.5 rounded-full font-medium">champion = v2</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">LightGBM + XGBoost ensemble (5-fold CV) for binary customer churn prediction.</p>
+                        </div>
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gray-200 text-left bg-gray-50/50">
+                                    <th class="py-2 px-4 text-gray-500 font-medium text-xs uppercase">Version</th>
+                                    <th class="py-2 px-4 text-gray-500 font-medium text-xs uppercase">Aliases</th>
+                                    <th class="py-2 px-4 text-gray-500 font-medium text-xs uppercase">Created</th>
+                                    <th class="py-2 px-4 text-gray-500 font-medium text-xs uppercase">Source Run</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b border-gray-100 bg-orange-50 hover:bg-orange-100">
+                                    <td class="py-3 px-4"><span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-mono text-xs">Version 2</span></td>
+                                    <td class="py-3 px-4"><span class="bg-orange-200 text-orange-900 px-2 py-0.5 rounded text-xs font-bold">champion</span></td>
+                                    <td class="py-3 px-4 text-gray-500 text-xs">2026-03-23 21:39</td>
+                                    <td class="py-3 px-4 font-mono text-xs text-blue-600">69de7df6fbb4...acb431d11eae14df</td>
+                                </tr>
+                                <tr class="border-b border-gray-100 hover:bg-gray-50">
+                                    <td class="py-3 px-4"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono text-xs">Version 1</span></td>
+                                    <td class="py-3 px-4 text-gray-400 text-xs italic">none</td>
+                                    <td class="py-3 px-4 text-gray-500 text-xs">2026-03-23 19:19</td>
+                                    <td class="py-3 px-4 font-mono text-xs text-blue-600">60671fb535c7...22c92a0bf29f48f</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                        <strong>How it works:</strong> The FastAPI service loads the champion model at startup via <code class="bg-blue-100 px-1 rounded text-xs font-mono">mlflow.pyfunc.load_model("models:/CustomerChurnEnsemble@champion")</code>. When a new version is trained and promoted, the service picks it up on next restart.
                     </div>
                 </div>
             </div>
@@ -223,23 +809,13 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
                 <div class="text-2xl mb-2">🐍</div>
-                <h4 class="font-bold">Python & Pandas</h4>
-                <p class="text-xs text-stone-500">Processing & Modeling</p>
-            </div>
-            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
-                <div class="text-2xl mb-2">🔄</div>
-                <h4 class="font-bold">DVC</h4>
-                <p class="text-xs text-stone-500">Data Version Control</p>
+                <h4 class="font-bold">Python &amp; Pandas</h4>
+                <p class="text-xs text-stone-500">Processing &amp; Modeling</p>
             </div>
             <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
                 <div class="text-2xl mb-2">🧪</div>
                 <h4 class="font-bold">MLflow</h4>
-                <p class="text-xs text-stone-500">Experiment Tracking</p>
-            </div>
-            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
-                <div class="text-2xl mb-2">🐙</div>
-                <h4 class="font-bold">GitHub Actions</h4>
-                <p class="text-xs text-stone-500">CI/CD Automation</p>
+                <p class="text-xs text-stone-500">Experiment Tracking &amp; Registry</p>
             </div>
             <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
                 <div class="text-2xl mb-2">⚡</div>
@@ -252,14 +828,345 @@
                 <p class="text-xs text-stone-500">Containerization</p>
             </div>
             <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🌲</div>
+                <h4 class="font-bold">LightGBM</h4>
+                <p class="text-xs text-stone-500">Gradient Boosting</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🚀</div>
+                <h4 class="font-bold">XGBoost</h4>
+                <p class="text-xs text-stone-500">Gradient Boosting</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
+                <div class="text-2xl mb-2">🔍</div>
+                <h4 class="font-bold">Optuna</h4>
+                <p class="text-xs text-stone-500">Hyperparameter Tuning</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
                 <div class="text-2xl mb-2">📊</div>
                 <h4 class="font-bold">Evidently AI</h4>
                 <p class="text-xs text-stone-500">Drift Monitoring</p>
             </div>
-            <div class="bg-white p-4 rounded-lg shadow-sm border border-stone-200 hover:border-orange-500 transition">
-                <div class="text-2xl mb-2">🌲</div>
-                <h4 class="font-bold">XGBoost</h4>
-                <p class="text-xs text-stone-500">Gradient Boosting</p>
+        </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- SECTION: FastAPI Deployment                                          -->
+    <!-- ================================================================== -->
+    <section id="deployment" class="bg-stone-900 text-stone-100 py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-10">
+                <h2 class="text-2xl font-bold text-white">Model Deployment with FastAPI</h2>
+                <p class="text-stone-400 mt-2 max-w-3xl">
+                    The champion model is served as a REST API using FastAPI inside Docker. The API loads the registered model from MLflow at startup and exposes prediction endpoints.
+                </p>
+            </div>
+
+            <!-- Architecture -->
+            <div class="bg-stone-800 rounded-xl p-6 border border-stone-700 mb-10">
+                <h3 class="font-semibold text-lg mb-6 text-white text-center">Deployment Architecture</h3>
+                <div class="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6">
+                    <div class="bg-stone-700 border border-stone-600 rounded-lg p-4 text-center w-48">
+                        <div class="text-2xl mb-1">🐳</div>
+                        <div class="text-xs text-stone-400">docker compose up</div>
+                        <div class="text-sm font-bold text-white mt-1">Docker Compose</div>
+                    </div>
+                    <div class="text-stone-500 text-2xl hidden md:block">&rarr;</div>
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <div class="bg-[#0194e2]/20 border border-[#0194e2]/40 rounded-lg p-4 text-center w-56">
+                            <div class="text-2xl mb-1">🧪</div>
+                            <div class="text-sm font-bold text-white">MLflow Server</div>
+                            <div class="text-xs text-stone-400 mt-1">:5001 &bull; SQLite + Artifacts</div>
+                            <div class="text-xs text-stone-500 mt-1 font-mono">Dockerfile.mlflow</div>
+                        </div>
+                        <div class="bg-orange-500/20 border border-orange-500/40 rounded-lg p-4 text-center w-56">
+                            <div class="text-2xl mb-1">⚡</div>
+                            <div class="text-sm font-bold text-white">FastAPI Service</div>
+                            <div class="text-xs text-stone-400 mt-1">:8000 &bull; /predict, /predict/batch</div>
+                            <div class="text-xs text-stone-500 mt-1 font-mono">Dockerfile.api</div>
+                        </div>
+                    </div>
+                    <div class="text-stone-500 text-2xl hidden md:block">&rarr;</div>
+                    <div class="bg-stone-700 border border-stone-600 rounded-lg p-4 text-center w-48">
+                        <div class="text-2xl mb-1">🏆</div>
+                        <div class="text-xs text-orange-400 font-mono">@champion</div>
+                        <div class="text-sm font-bold text-white mt-1">Registry Model</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Endpoints Table -->
+            <div class="bg-stone-800 rounded-xl p-6 border border-stone-700 mb-10">
+                <h3 class="font-semibold text-lg mb-4 text-white flex items-center"><span class="mr-2">⚡</span> API Endpoints</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-stone-600 text-left">
+                                <th class="py-3 px-4 text-stone-400 font-medium text-xs uppercase">Method</th>
+                                <th class="py-3 px-4 text-stone-400 font-medium text-xs uppercase">Path</th>
+                                <th class="py-3 px-4 text-stone-400 font-medium text-xs uppercase">Description</th>
+                                <th class="py-3 px-4 text-stone-400 font-medium text-xs uppercase">Response</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-stone-300">
+                            <tr class="border-b border-stone-700 hover:bg-stone-700/50">
+                                <td class="py-3 px-4"><span class="bg-green-900 text-green-300 text-xs px-2 py-0.5 rounded font-mono">GET</span></td>
+                                <td class="py-3 px-4 font-mono text-xs">/</td>
+                                <td class="py-3 px-4">Health check</td>
+                                <td class="py-3 px-4 text-xs font-mono text-stone-400">{"status": "healthy", "model": "...", "loaded": true}</td>
+                            </tr>
+                            <tr class="border-b border-stone-700 hover:bg-stone-700/50">
+                                <td class="py-3 px-4"><span class="bg-blue-900 text-blue-300 text-xs px-2 py-0.5 rounded font-mono">POST</span></td>
+                                <td class="py-3 px-4 font-mono text-xs">/predict</td>
+                                <td class="py-3 px-4">Single customer prediction</td>
+                                <td class="py-3 px-4 text-xs font-mono text-stone-400">PredictionResponse</td>
+                            </tr>
+                            <tr class="border-b border-stone-700 hover:bg-stone-700/50">
+                                <td class="py-3 px-4"><span class="bg-blue-900 text-blue-300 text-xs px-2 py-0.5 rounded font-mono">POST</span></td>
+                                <td class="py-3 px-4 font-mono text-xs">/predict/batch</td>
+                                <td class="py-3 px-4">Batch prediction</td>
+                                <td class="py-3 px-4 text-xs font-mono text-stone-400">BatchPredictionResponse</td>
+                            </tr>
+                            <tr class="hover:bg-stone-700/50">
+                                <td class="py-3 px-4"><span class="bg-green-900 text-green-300 text-xs px-2 py-0.5 rounded font-mono">GET</span></td>
+                                <td class="py-3 px-4 font-mono text-xs">/model/info</td>
+                                <td class="py-3 px-4">Model metadata</td>
+                                <td class="py-3 px-4 text-xs font-mono text-stone-400">{"registered_model": "...", "run_id": "...", ...}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Code: Tabbed view -->
+            <div class="mb-10">
+                <h3 class="font-semibold text-lg mb-4 text-white">Source Code</h3>
+                <div class="bg-stone-800 rounded-xl border border-stone-700 overflow-hidden">
+                    <div class="flex flex-wrap bg-stone-900 border-b border-stone-700">
+                        <button onclick="switchCodeTab('web_service')" class="code-tab active px-4 py-2.5 text-xs font-mono text-stone-400 border-b-2 border-transparent" data-codetab="web_service">web_service.py</button>
+                        <button onclick="switchCodeTab('schemas')" class="code-tab px-4 py-2.5 text-xs font-mono text-stone-400 border-b-2 border-transparent" data-codetab="schemas">schemas.py</button>
+                        <button onclick="switchCodeTab('compose')" class="code-tab px-4 py-2.5 text-xs font-mono text-stone-400 border-b-2 border-transparent" data-codetab="compose">docker-compose.yml</button>
+                        <button onclick="switchCodeTab('dockerfile_api')" class="code-tab px-4 py-2.5 text-xs font-mono text-stone-400 border-b-2 border-transparent" data-codetab="dockerfile_api">Dockerfile.api</button>
+                        <button onclick="switchCodeTab('dockerfile_mlflow')" class="code-tab px-4 py-2.5 text-xs font-mono text-stone-400 border-b-2 border-transparent" data-codetab="dockerfile_mlflow">Dockerfile.mlflow</button>
+                    </div>
+
+                    <div id="codepanel-web_service" class="mlflow-tab-panel active">
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-python">@asynccontextmanager
+async def lifespan(app: FastAPI):
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+    models_state["model"] = _load_registry_model(
+        REGISTERED_MODEL_NAME, alias="champion"
+    )
+    yield
+    models_state.clear()
+
+app = FastAPI(
+    title="Customer Churn Prediction API",
+    description="LightGBM + XGBoost ensemble for churn prediction.",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict(customer: CustomerData):
+    return _predict([customer])[0]
+
+@app.post("/predict/batch", response_model=BatchPredictionResponse)
+def predict_batch(customers: list[CustomerData]):
+    if not customers:
+        raise HTTPException(status_code=400, detail="Empty list")
+    return BatchPredictionResponse(predictions=_predict(customers))
+
+@app.get("/model/info")
+def model_info():
+    model = models_state.get("model")
+    meta = model.metadata
+    return {
+        "registered_model": REGISTERED_MODEL_NAME,
+        "model_uri": f"models:/{REGISTERED_MODEL_NAME}@champion",
+        "run_id": getattr(meta, "run_id", None),
+        "flavors": list(getattr(meta, "flavors", {}).keys()),
+    }</code></pre>
+                    </div>
+
+                    <div id="codepanel-schemas" class="mlflow-tab-panel">
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-python">from pydantic import BaseModel, Field
+from typing import Literal
+
+class YesNo(str, Enum):
+    yes = "Yes"
+    no = "No"
+
+class InternetService(str, Enum):
+    dsl = "DSL"
+    fiber = "Fiber optic"
+    no = "No"
+
+class Contract(str, Enum):
+    month = "Month-to-month"
+    one_year = "One year"
+    two_year = "Two year"
+
+class CustomerData(BaseModel):
+    SeniorCitizen: Literal[0, 1]
+    Partner: YesNo
+    Dependents: YesNo
+    tenure: int = Field(ge=0)
+    PhoneService: YesNo
+    MultipleLines: MultipleLines
+    InternetService: InternetService
+    OnlineSecurity: InternetDependent
+    OnlineBackup: InternetDependent
+    DeviceProtection: InternetDependent
+    TechSupport: InternetDependent
+    StreamingTV: InternetDependent
+    StreamingMovies: InternetDependent
+    Contract: Contract
+    PaperlessBilling: YesNo
+    PaymentMethod: PaymentMethod
+    MonthlyCharges: float = Field(ge=0)
+    TotalCharges: float = Field(ge=0)
+
+class PredictionResponse(BaseModel):
+    churn_probability: float
+    churn: bool
+
+class BatchPredictionResponse(BaseModel):
+    predictions: list[PredictionResponse]</code></pre>
+                    </div>
+
+                    <div id="codepanel-compose" class="mlflow-tab-panel">
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-yaml">services:
+  api:
+    build:
+      context: ..
+      dockerfile: project/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+    depends_on:
+      - mlflow
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./mlflow.db:/mlflow/mlflow.db
+      - ./mlruns:/mlflow/mlruns</code></pre>
+                    </div>
+
+                    <div id="codepanel-dockerfile_api" class="mlflow-tab-panel">
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-dockerfile">FROM python:3.13-slim
+
+RUN apt-get update \
+    &amp;&amp; apt-get install -y --no-install-recommends libgomp1 \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+COPY project/web_service.py ./
+COPY project/schemas/ ./schemas/
+
+EXPOSE 8000
+
+CMD ["uv", "run", "fastapi", "run", "web_service.py", \
+     "--host", "0.0.0.0", "--port", "8000"]</code></pre>
+                    </div>
+
+                    <div id="codepanel-dockerfile_mlflow" class="mlflow-tab-panel">
+                        <pre class="p-4 text-xs font-mono overflow-x-auto max-h-[420px]"><code class="language-dockerfile">FROM python:3.13-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+RUN uv pip install mlflow --system --no-cache
+
+WORKDIR /mlflow
+
+EXPOSE 5001
+
+CMD [ \
+    "mlflow", "server", \
+    "--host", "0.0.0.0", \
+    "--port", "5001", \
+    "--backend-store-uri", "sqlite:///mlflow.db", \
+    "--default-artifact-root", "/mlflow/mlruns", \
+    "--serve-artifacts", \
+    "--allowed-hosts", \
+        "mlflow,mlflow:5001,localhost,localhost:5001" \
+]</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive API Demo -->
+            <div class="bg-stone-800 rounded-xl p-6 border border-stone-700">
+                <h3 class="font-semibold text-lg mb-4 text-white flex items-center"><span class="mr-2">🧪</span> Interactive API Demo</h3>
+                <p class="text-sm text-stone-400 mb-4">Simulated <code class="text-orange-400 text-xs">POST /predict</code> call. Edit the JSON payload and click Send to see a prediction.</p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-stone-400 font-semibold uppercase">Request Body</span>
+                            <span class="bg-blue-900 text-blue-300 text-xs px-2 py-0.5 rounded font-mono">POST /predict</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 mb-3">
+                            <span class="text-xs text-stone-500">Presets:</span>
+                            <button onclick="loadPreset('low')" class="preset-btn" title="Loyal, long-tenure customer">Low Risk</button>
+                            <button onclick="loadPreset('medium')" class="preset-btn" title="Mid-tenure, one-year contract">Medium Risk</button>
+                            <button onclick="loadPreset('high')" class="preset-btn" title="New, month-to-month, fiber optic">High Risk</button>
+                        </div>
+                        <textarea id="api-request" class="w-full h-80 font-mono text-xs p-4 bg-gray-900 text-green-400 rounded-lg border border-gray-700 resize-none focus:border-orange-500 focus:outline-none">{
+  "SeniorCitizen": 0,
+  "Partner": "Yes",
+  "Dependents": "Yes",
+  "tenure": 29,
+  "PhoneService": "Yes",
+  "MultipleLines": "No",
+  "InternetService": "DSL",
+  "OnlineSecurity": "Yes",
+  "OnlineBackup": "No",
+  "DeviceProtection": "Yes",
+  "TechSupport": "Yes",
+  "StreamingTV": "No",
+  "StreamingMovies": "No",
+  "Contract": "One year",
+  "PaperlessBilling": "Yes",
+  "PaymentMethod": "Mailed check",
+  "MonthlyCharges": 60.10,
+  "TotalCharges": 1653.85
+}</textarea>
+                        <button onclick="simulateApiCall()" class="mt-3 bg-orange-600 text-white px-6 py-2.5 rounded-lg hover:bg-orange-700 transition w-full font-semibold text-sm">
+                            Send Request
+                        </button>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-stone-400 font-semibold uppercase">Response</span>
+                            <span id="api-status" class="text-xs text-stone-500"></span>
+                        </div>
+                        <div id="api-response" class="h-80 font-mono text-xs p-4 bg-gray-900 text-blue-400 rounded-lg border border-gray-700 overflow-auto whitespace-pre">
+<span class="text-stone-500">Click "Send Request" to simulate a prediction.</span>
+
+<span class="text-stone-600">The response mirrors the real FastAPI
+/predict endpoint output format.</span></div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -269,64 +1176,135 @@
         <div class="mb-8">
             <h2 class="text-2xl font-bold text-stone-900">Potential Development Challenges</h2>
             <p class="text-stone-600 mt-2 max-w-3xl">
-                Building an end-to-end MLOps pipeline for customer churn prediction is not only a technical task, but also an engineering and organisational challenge. 
+                Building an end-to-end MLOps pipeline for customer churn prediction is not only a technical task, but also an engineering and organisational challenge.
                 Below are key risks that are likely to appear during development and deployment.
             </p>
         </div>
-
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <div class="text-2xl mb-2">🧹</div>
-                <h3 class="font-semibold text-stone-900">Data Quality & Drift</h3>
-                <p class="text-sm text-stone-600 mt-2">
-                    Inconsistent input formats, missing values, and delayed data feeds can break preprocessing pipelines. 
-                    Over time, production data may drift away from the training distribution, degrading model performance.
-                </p>
+                <h3 class="font-semibold text-stone-900">Data Quality &amp; Drift</h3>
+                <p class="text-sm text-stone-600 mt-2">Inconsistent input formats, missing values, and delayed data feeds can break preprocessing pipelines. Over time, production data may drift away from the training distribution.</p>
             </div>
-
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <div class="text-2xl mb-2">🏗️</div>
-                <h3 class="font-semibold text-stone-900">MLOps Infrastructure Complexity</h3>
-                <p class="text-sm text-stone-600 mt-2">
-                    Integrating DVC, MLflow, Docker, FastAPI, and GitHub Actions requires careful environment management, 
-                    secure secrets handling, and consistent configuration across local, CI, and production environments.
-                </p>
+                <h3 class="font-semibold text-stone-900">Infrastructure Complexity</h3>
+                <p class="text-sm text-stone-600 mt-2">Integrating MLflow, Docker, FastAPI, and GitHub Actions requires careful environment management and consistent configuration across local and production.</p>
             </div>
-
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <div class="text-2xl mb-2">⚖️</div>
                 <h3 class="font-semibold text-stone-900">Metric Alignment</h3>
-                <p class="text-sm text-stone-600 mt-2">
-                    Business stakeholders may initially focus on accuracy, while the model is optimised for Recall and cost-based metrics. 
-                    Aligning KPIs and explaining trade-offs between False Positives and False Negatives is essential.
-                </p>
+                <p class="text-sm text-stone-600 mt-2">Business stakeholders may focus on accuracy, while the model is optimised for Recall and cost-based metrics. Aligning KPIs and explaining trade-offs is essential.</p>
             </div>
-
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <div class="text-2xl mb-2">🔐</div>
-                <h3 class="font-semibold text-stone-900">Security & Compliance</h3>
-                <p class="text-sm text-stone-600 mt-2">
-                    Handling customer-level data requires secure storage, controlled access to experiment artifacts, 
-                    and compliance with internal governance and privacy regulations.
-                </p>
+                <h3 class="font-semibold text-stone-900">Security &amp; Compliance</h3>
+                <p class="text-sm text-stone-600 mt-2">Handling customer-level data requires secure storage, controlled access to experiment artifacts, and compliance with governance and privacy regulations.</p>
             </div>
-
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <div class="text-2xl mb-2">🧪</div>
-                <h3 class="font-semibold text-stone-900">Testing & Reliability</h3>
-                <p class="text-sm text-stone-600 mt-2">
-                    Writing robust unit and integration tests for data pipelines, feature transformations, and API endpoints is non-trivial. 
-                    Flaky tests or insufficient coverage can slow down CI/CD and hide critical bugs.
-                </p>
+                <h3 class="font-semibold text-stone-900">Testing &amp; Reliability</h3>
+                <p class="text-sm text-stone-600 mt-2">Writing robust unit and integration tests for data pipelines, feature transformations, and API endpoints is non-trivial. Insufficient coverage can hide critical bugs.</p>
             </div>
-
             <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
                 <div class="text-2xl mb-2">🤝</div>
                 <h3 class="font-semibold text-stone-900">Operational Adoption</h3>
-                <p class="text-sm text-stone-600 mt-2">
-                    Even with a strong model, integrating churn scores into existing CRM or retention workflows, 
-                    training teams, and closing the feedback loop between business and data science can be challenging.
-                </p>
+                <p class="text-sm text-stone-600 mt-2">Even with a strong model, integrating churn scores into existing CRM or retention workflows and closing the feedback loop can be challenging.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- SECTION: Git Repository                                             -->
+    <!-- ================================================================== -->
+    <section id="repo" class="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold text-stone-900">Git Repository</h2>
+            <p class="text-stone-600 mt-2 max-w-3xl">
+                All code, configuration, and documentation for this project is version-controlled and available on GitHub.
+            </p>
+        </div>
+
+        <!-- Repo Link -->
+        <a href="https://github.com/DanYT2/MLOPS_HSLU_project" target="_blank" class="block bg-white p-6 rounded-xl shadow-sm border border-stone-200 hover:border-orange-500 transition mb-8 group">
+            <div class="flex items-center gap-4">
+                <div class="text-4xl">🐙</div>
+                <div class="flex-1">
+                    <h3 class="font-bold text-lg text-stone-900 group-hover:text-orange-600 transition">DanYT2/MLOPS_HSLU_project</h3>
+                    <p class="text-sm text-stone-500">https://github.com/DanYT2/MLOPS_HSLU_project</p>
+                </div>
+                <div class="text-stone-400 group-hover:text-orange-600 text-xl transition">&rarr;</div>
+            </div>
+        </a>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- File Tree -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <h3 class="font-semibold text-lg mb-4 flex items-center"><span class="mr-2">📁</span> Project Structure</h3>
+                <div class="font-mono text-sm leading-relaxed bg-stone-50 p-4 rounded-lg border border-stone-100">
+<pre class="text-stone-700">artificial_intelligence/
+├── <span class="text-orange-600 font-semibold">dashboard.html</span>
+├── <span class="text-stone-400">main.py</span>
+├── <span class="text-blue-600">pyproject.toml</span>
+├── <span class="text-blue-600">uv.lock</span>
+├── <span class="text-stone-400">.gitignore</span>
+├── lessons/
+│   └── sw_03/
+│       └── <span class="text-stone-400">web_service.py</span>
+└── project/
+    ├── <span class="text-orange-600 font-semibold">train.py</span>
+    ├── <span class="text-orange-600 font-semibold">web_service.py</span>
+    ├── <span class="text-blue-600">docker-compose.yml</span>
+    ├── <span class="text-blue-600">Dockerfile.api</span>
+    ├── <span class="text-blue-600">Dockerfile.mlflow</span>
+    ├── <span class="text-stone-400">customer-churn-eda.ipynb</span>
+    ├── models/
+    │   ├── <span class="text-green-600">best_params.json</span>
+    │   └── <span class="text-green-600">feature_list.json</span>
+    └── schemas/
+        └── <span class="text-orange-600 font-semibold">schemas.py</span></pre>
+                </div>
+            </div>
+
+            <!-- Key Files + Dependencies -->
+            <div class="space-y-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                    <h3 class="font-semibold text-lg mb-4 flex items-center"><span class="mr-2">📄</span> Key Files</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b-2 border-stone-200">
+                                    <th class="text-left py-2 px-3 font-semibold text-stone-700 text-xs uppercase">File</th>
+                                    <th class="text-left py-2 px-3 font-semibold text-stone-700 text-xs uppercase">Purpose</th>
+                                    <th class="text-right py-2 px-3 font-semibold text-stone-700 text-xs uppercase">Lines</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b border-stone-100"><td class="py-2 px-3 font-mono text-xs text-orange-600">train.py</td><td class="py-2 px-3">Full pipeline: load, feature eng, Optuna HPO, 5-fold CV, MLflow tracking, model registration</td><td class="py-2 px-3 text-right font-mono">645</td></tr>
+                                <tr class="border-b border-stone-100"><td class="py-2 px-3 font-mono text-xs text-orange-600">web_service.py</td><td class="py-2 px-3">FastAPI app: loads champion model, /predict endpoints, preprocessing</td><td class="py-2 px-3 text-right font-mono">209</td></tr>
+                                <tr class="border-b border-stone-100"><td class="py-2 px-3 font-mono text-xs text-orange-600">schemas.py</td><td class="py-2 px-3">Pydantic v2 models: CustomerData, PredictionResponse, enums</td><td class="py-2 px-3 text-right font-mono">97</td></tr>
+                                <tr class="border-b border-stone-100"><td class="py-2 px-3 font-mono text-xs text-blue-600">docker-compose.yml</td><td class="py-2 px-3">2-service stack: MLflow server + FastAPI</td><td class="py-2 px-3 text-right font-mono">24</td></tr>
+                                <tr class="border-b border-stone-100"><td class="py-2 px-3 font-mono text-xs text-blue-600">Dockerfile.api</td><td class="py-2 px-3">Python 3.13 + uv + libgomp1 for GBDT</td><td class="py-2 px-3 text-right font-mono">25</td></tr>
+                                <tr><td class="py-2 px-3 font-mono text-xs text-blue-600">Dockerfile.mlflow</td><td class="py-2 px-3">MLflow server with SQLite backend</td><td class="py-2 px-3 text-right font-mono">20</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                    <h3 class="font-semibold text-lg mb-4 flex items-center"><span class="mr-2">📦</span> Dependencies</h3>
+                    <p class="text-xs text-stone-500 mb-3">From <code class="bg-stone-100 px-1 rounded">pyproject.toml</code> &mdash; managed with <strong>uv</strong> (Python &ge;3.13)</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">fastapi[standard] &ge;0.135</span>
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">mlflow &ge;3.10</span>
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">lightgbm &ge;4.6</span>
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">xgboost &ge;3.2</span>
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">optuna &ge;4.7</span>
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">joblib &ge;1.4</span>
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">seaborn &ge;0.13</span>
+                        <span class="bg-stone-100 text-stone-700 text-xs px-3 py-1.5 rounded-full font-mono">ruff &ge;0.15</span>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -335,18 +1313,15 @@
     <section id="roi" class="bg-orange-50 py-12 border-t border-orange-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="mb-8">
-                <h2 class="text-2xl font-bold text-stone-900">Business Impact & ROI</h2>
+                <h2 class="text-2xl font-bold text-stone-900">Business Impact &amp; ROI</h2>
                 <p class="text-stone-600 mt-2 max-w-3xl">
-                    Technical metrics aren't enough. Use this simulator to calculate the business value of the ML model compared to a baseline approach. 
+                    Technical metrics aren't enough. Use this simulator to calculate the business value of the ML model compared to a baseline approach.
                     Adjust the costs to see how avoiding False Negatives (lost customers) drives value.
                 </p>
             </div>
-
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <!-- Inputs -->
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-orange-200">
                     <h3 class="font-bold text-lg mb-4 text-orange-800">Parameters</h3>
-                    
                     <div class="space-y-4">
                         <div>
                             <label class="block text-xs font-semibold text-stone-500 uppercase">Customer Base</label>
@@ -365,8 +1340,6 @@
                         <button id="roi-calculate-btn" class="w-full bg-stone-900 text-white py-2 rounded hover:bg-stone-700 transition">Update Projection</button>
                     </div>
                 </div>
-
-                <!-- Visualization -->
                 <div class="col-span-1 lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-orange-200">
                     <h3 class="font-bold text-lg mb-4 text-center">Cost Comparison Projection</h3>
                     <div class="chart-container">
@@ -380,92 +1353,39 @@
     <!-- Footer -->
     <footer class="bg-stone-900 text-stone-400 py-8 mt-12">
         <div class="max-w-7xl mx-auto px-4 text-center">
-            <p>&copy; 2026 HSLU AI MLOps Project. Based on IBM Telco Customer Churn Dataset.</p>
+            <p>&copy; 2026 HSLU AI MLOps Project &bull; Dan Wanjohi &bull; Based on IBM Telco Customer Churn Dataset</p>
+            <p class="mt-2 text-xs text-stone-500">
+                <a href="https://github.com/DanYT2/MLOPS_HSLU_project" target="_blank" class="hover:text-orange-400 transition">GitHub Repository</a>
+            </p>
         </div>
     </footer>
 
     <script>
-        // --- Data & State ---
+        // ── Pipeline Data ────────────────────────────────────────
         const pipelineData = [
-            {
-                id: 1,
-                phase: "Phase 1: Ingestion & Versioning",
-                icon: "📥",
-                action: "Extract raw CSV to `data/raw/`.",
-                component: "DVC (Data Version Control)",
-                details: "DVC initializes a tracking file (`.dvc`) linked to a remote bucket (S3). Git tracks the metadata, ensuring lightweight repo while securing heavy data.",
-                code: "dvc init\ndvc add data/raw/telco_churn.csv\ngit add data/raw/telco_churn.csv.dvc .gitignore\ngit commit -m 'Track raw data'"
-            },
-            {
-                id: 2,
-                phase: "Phase 2: Preprocessing",
-                icon: "🧹",
-                action: "Cleaning, Encoding, Scaling.",
-                component: "Scikit-Learn Pipeline",
-                details: "Convert `TotalCharges` to numeric. Apply One-Hot Encoding to categoricals. Scale `tenure` and `MonthlyCharges` using StandardScaler. Save `preprocessor.pkl` for consistency.",
-                code: "from sklearn.preprocessing import StandardScaler\nscaler = StandardScaler()\ndf['tenure_scaled'] = scaler.fit_transform(df[['tenure']])\njoblib.dump(scaler, 'artifacts/preprocessor.pkl')"
-            },
-            {
-                id: 3,
-                phase: "Phase 3: Training & Tracking",
-                icon: "🏋️",
-                action: "Train Baseline Models (XGBoost).",
-                component: "MLflow",
-                details: "Use `mlflow.start_run()` to log hyperparameters (`max_depth`, `learning_rate`), metrics (Accuracy, F1), and the model artifact itself.",
-                code: "with mlflow.start_run():\n    clf = XGBClassifier(max_depth=5)\n    clf.fit(X_train, y_train)\n    mlflow.log_metric('accuracy', acc)\n    mlflow.xgboost.log_model(clf, 'model')"
-            },
-            {
-                id: 4,
-                phase: "Phase 4: Evaluation",
-                icon: "⚖️",
-                action: "Model Selection.",
-                component: "Model Registry",
-                details: "Due to class imbalance, we prioritize **Recall** (finding churners) over Accuracy. The best model is promoted to 'Staging' in the MLflow Registry.",
-                code: "# Compare runs in MLflow UI\n# Select run_id with highest Recall\nclient.transition_model_version_stage(\n    name='telco-churn-model',\n    version=1,\n    stage='Staging'\n)"
-            },
-            {
-                id: 5,
-                phase: "Phase 5: CI/CD",
-                icon: "🔄",
-                action: "Automated Testing & Build.",
-                component: "GitHub Actions",
-                details: "On push to `main`: 1. Pull data via DVC. 2. Run `pytest` on preprocessing logic. 3. Build Docker image if tests pass.",
-                code: "name: MLOps Pipeline\non: [push]\njobs:\n  build:\n    steps:\n      - uses: actions/checkout@v2\n      - run: dvc pull\n      - run: pytest tests/"
-            },
-            {
-                id: 6,
-                phase: "Phase 6: Serving",
-                icon: "🚀",
-                action: "Deploy REST API.",
-                component: "FastAPI + Docker",
-                details: "Serve the model via a `/predict` endpoint. The Docker container ensures the environment (dependencies in `requirements.txt`) is identical to training.",
-                code: "@app.post('/predict')\ndef predict(data: CustomerData):\n    processed = preprocessor.transform(data)\n    prob = model.predict_proba(processed)\n    return {'churn_probability': prob}"
-            },
-            {
-                id: 7,
-                phase: "Phase 7: Monitoring",
-                icon: "📡",
-                action: "Detect Drift.",
-                component: "Evidently AI",
-                details: "Compare production data streams against the training baseline. Alert if `MonthlyCharges` distribution shifts (Data Drift) or accuracy drops (Concept Drift).",
-                code: "report = Report(metrics=[DataDriftPreset()])\nreport.run(reference_data=train, current_data=prod)\nreport.save_html('drift_report.html')"
-            }
+            { id: 1, phase: "Phase 1: Ingestion & Versioning", icon: "📥", action: "Extract raw CSV to data/raw/.", component: "DVC (Data Version Control)", details: "DVC initializes a tracking file (.dvc) linked to a remote bucket. Git tracks the metadata, ensuring lightweight repo while securing heavy data.", code: "dvc init\ndvc add data/raw/telco_churn.csv\ngit add data/raw/telco_churn.csv.dvc .gitignore\ngit commit -m 'Track raw data'" },
+            { id: 2, phase: "Phase 2: Preprocessing", icon: "🧹", action: "Cleaning, Encoding, Scaling.", component: "Scikit-Learn Pipeline", details: "Convert TotalCharges to numeric. Apply One-Hot Encoding to categoricals. Create AvgMonthlyCharge and TotalServices features.", code: "def engineer_features(train, test):\n    df['AvgMonthlyCharge'] = df['TotalCharges'] / (df['tenure'] + 1)\n    df['TotalServices'] = (df[SERVICE_COLUMNS] == 'Yes').sum(axis=1)\n    df = pd.get_dummies(df, columns=ONE_HOT_COLUMNS, drop_first=True)\n    return X, y, test" },
+            { id: 3, phase: "Phase 3: HP Tuning", icon: "🔍", action: "Optuna Hyperparameter Optimization.", component: "Optuna + StratifiedKFold", details: "Bayesian optimization with ROC-AUC objective. Separate studies for LightGBM and XGBoost, persisted in SQLite.", code: "study_lgbm = optuna.create_study(direction='maximize')\nstudy_lgbm.optimize(\n    lambda trial: _objective_lgbm(trial, X, y),\n    n_trials=n_trials\n)\nbest_lgbm_params = study_lgbm.best_params" },
+            { id: 4, phase: "Phase 4: Training & Tracking", icon: "🏋️", action: "Train Ensemble (LightGBM + XGBoost).", component: "MLflow", details: "5-fold stratified CV with nested MLflow runs per model per fold. Logs metrics (AUC, F1, Recall), confusion matrices, and feature importances.", code: "with mlflow.start_run(run_name='Customer_Churn_Ensemble'):\n    for fold in range(5):\n        with mlflow.start_run(nested=True):\n            lgb_model.fit(X_train, y_train)\n            mlflow.log_metric('val_auc', auc)\n            mlflow.lightgbm.log_model(lgb_model, ...)" },
+            { id: 5, phase: "Phase 5: Model Registry", icon: "📦", action: "Register Champion Model.", component: "MLflow Model Registry", details: "The ensemble is wrapped as a pyfunc model and registered as CustomerChurnEnsemble. The best version gets the 'champion' alias.", code: "model_info = mlflow.pyfunc.log_model(\n    python_model=ChurnEnsembleModel(),\n    artifacts=artifacts\n)\nmlflow.register_model(model_uri, 'CustomerChurnEnsemble')\nclient.set_registered_model_alias(\n    name='CustomerChurnEnsemble',\n    alias='champion', version=v\n)" },
+            { id: 6, phase: "Phase 6: Serving", icon: "🚀", action: "Deploy REST API.", component: "FastAPI + Docker", details: "Serve the model via /predict and /predict/batch endpoints. Docker Compose runs both the MLflow server and the FastAPI service.", code: "@app.post('/predict')\ndef predict(customer: CustomerData):\n    return _predict([customer])[0]\n\n# docker compose up\n# API at :8000, MLflow UI at :5001" },
+            { id: 7, phase: "Phase 7: Monitoring", icon: "📡", action: "Detect Drift.", component: "Evidently AI", details: "Compare production data streams against the training baseline. Alert if MonthlyCharges distribution shifts (Data Drift) or accuracy drops (Concept Drift).", code: "report = Report(metrics=[DataDriftPreset()])\nreport.run(reference_data=train, current_data=prod)\nreport.save_html('drift_report.html')" }
         ];
 
         let currentStepId = 1;
 
-        // --- Functions ---
+        // ── Utility ──────────────────────────────────────────────
         function scrollToSection(id) {
             document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
         }
 
+        // ── Pipeline Stepper ─────────────────────────────────────
         function renderPipeline() {
             const stepsContainer = document.getElementById('pipeline-steps');
             const detailContainer = document.getElementById('pipeline-detail');
-            
-            // Render Steps List
+
             stepsContainer.innerHTML = pipelineData.map(step => `
-                <div onclick="updatePipelineDetail(${step.id})" 
+                <div onclick="updatePipelineDetail(${step.id})"
                      class="cursor-pointer p-4 rounded-lg transition duration-200 mb-3 flex items-center
                      ${step.id === currentStepId ? 'bg-stone-800 border-l-4 border-orange-500 shadow-lg' : 'bg-stone-800/50 hover:bg-stone-800 border-l-4 border-transparent text-stone-400'}">
                     <span class="text-2xl mr-3">${step.icon}</span>
@@ -476,145 +1396,288 @@
                 </div>
             `).join('');
 
-            // Render Detail View
-            const currentStep = pipelineData.find(s => s.id === currentStepId);
+            const s = pipelineData.find(s => s.id === currentStepId);
             detailContainer.innerHTML = `
                 <div class="flex items-center mb-6">
-                    <span class="text-4xl mr-4">${currentStep.icon}</span>
-                    <h3 class="text-2xl font-bold text-white">${currentStep.phase}</h3>
+                    <span class="text-4xl mr-4">${s.icon}</span>
+                    <h3 class="text-2xl font-bold text-white">${s.phase}</h3>
                 </div>
-                
                 <div class="grid grid-cols-1 gap-6">
                     <div class="bg-stone-700/50 p-5 rounded-lg border border-stone-600">
                         <h4 class="text-orange-400 font-bold uppercase text-xs mb-2 tracking-wider">Action & Component</h4>
-                        <p class="text-lg font-medium text-white mb-1">${currentStep.component}</p>
-                        <p class="text-stone-300 text-sm leading-relaxed">${currentStep.details}</p>
+                        <p class="text-lg font-medium text-white mb-1">${s.component}</p>
+                        <p class="text-stone-300 text-sm leading-relaxed">${s.details}</p>
                     </div>
-
-                    <div class="bg-black/40 p-5 rounded-lg border border-stone-700 font-mono text-sm overflow-x-auto">
-                        <h4 class="text-stone-500 font-bold uppercase text-xs mb-2 tracking-wider">Pseudo-Code / Config</h4>
-                        <pre class="text-green-400 whitespace-pre-wrap">${currentStep.code}</pre>
+                    <div class="bg-black/40 p-5 rounded-lg border border-stone-700 overflow-x-auto pipeline-code">
+                        <h4 class="text-stone-500 font-bold uppercase text-xs mb-2 tracking-wider">Code</h4>
+                        <pre style="background:transparent;margin:0;padding:0;"><code class="language-python" style="font-size:0.8rem;line-height:1.6;">${s.code}</code></pre>
                     </div>
-                </div>
-            `;
+                </div>`;
+            highlightPipelineCode();
         }
 
         function updatePipelineDetail(id) {
             currentStepId = id;
             renderPipeline();
+            highlightPipelineCode();
         }
 
-        // --- Charts ---
+        // ── Charts ───────────────────────────────────────────────
 
-        // 1. Churn Imbalance (Donut)
         function initChurnChart() {
             const ctx = document.getElementById('churnChart').getContext('2d');
             new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: ['No Churn (Retained)', 'Yes Churn (Lost)'],
-                    datasets: [{
-                        data: [73.5, 26.5],
-                        backgroundColor: ['#d6d3d1', '#ea580c'], // stone-300, orange-600
-                        borderWidth: 0,
-                        hoverOffset: 4
-                    }]
+                    datasets: [{ data: [73.5, 26.5], backgroundColor: ['#d6d3d1', '#ea580c'], borderWidth: 0, hoverOffset: 4 }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom' },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return ` ${context.label}: ${context.raw}%`;
-                                }
-                            }
-                        }
-                    }
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}%` } } }
                 }
             });
         }
 
-        // 2. ROI Chart (Bar)
-        let roiChart;
+        function initFoldAucChart() {
+            const ctx = document.getElementById('foldAucChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Fold 1', 'Fold 2', 'Fold 3', 'Fold 4', 'Fold 5'],
+                    datasets: [
+                        { label: 'LightGBM', data: [0.9166, 0.9174, 0.9169, 0.9179, 0.9151], backgroundColor: '#60a5fa', borderRadius: 4 },
+                        { label: 'XGBoost', data: [0.9163, 0.9172, 0.9169, 0.9178, 0.9151], backgroundColor: '#ea580c', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { min: 0.914, max: 0.919, title: { display: true, text: 'Validation AUC' } } },
+                    plugins: { tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(4)}` } } }
+                }
+            });
+        }
 
+        function initRadarChart() {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['AUC', 'Accuracy', 'F1-Score', 'Precision', 'Recall'],
+                    datasets: [
+                        { label: 'LightGBM', data: [0.9168, 0.8619, 0.6774, 0.7149, 0.6437], borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.15)', pointBackgroundColor: '#60a5fa' },
+                        { label: 'XGBoost', data: [0.9167, 0.8619, 0.6770, 0.7153, 0.6426], borderColor: '#ea580c', backgroundColor: 'rgba(234,88,12,0.15)', pointBackgroundColor: '#ea580c' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { r: { min: 0.6, max: 0.95, ticks: { stepSize: 0.05, color: '#a8a29e', backdropColor: 'transparent' }, grid: { color: '#44403c' }, pointLabels: { color: '#d6d3d1', font: { size: 11 } } } },
+                    plugins: { legend: { position: 'bottom', labels: { color: '#d6d3d1' } } }
+                }
+            });
+        }
+
+        let roiChart;
         function updateRoiChart() {
             const customers = parseFloat(document.getElementById('roi-customers').value) || 10000;
             const fnCost = parseFloat(document.getElementById('roi-fn-cost').value) || 1200;
             const fpCost = parseFloat(document.getElementById('roi-fp-cost').value) || 50;
-
-            // Assumptions for simulation
-            // Baseline: 50% Recall (Random guess / simple rule)
-            // ML Model: 80% Recall, but slightly higher False Positive rate
-            
             const churnRate = 0.265;
             const totalChurners = customers * churnRate;
             const totalNonChurners = customers * (1 - churnRate);
-
-            // Baseline (Rule Based) - Poor precision/recall
-            const baseRecall = 0.50; // We catch 50% of churners
-            const baseFN = totalChurners * (1 - baseRecall);
-            const baseFP = totalNonChurners * 0.20; // High false alarm rate
-            const baseCost = (baseFN * fnCost) + (baseFP * fpCost);
-
-            // ML Model - Good precision/recall
-            const mlRecall = 0.80; // We catch 80% of churners
-            const mlFN = totalChurners * (1 - mlRecall);
-            const mlFP = totalNonChurners * 0.15; // Better precision
-            const mlCost = (mlFN * fnCost) + (mlFP * fpCost);
-
+            const baseCost = (totalChurners * 0.5 * fnCost) + (totalNonChurners * 0.20 * fpCost);
+            const mlCost = (totalChurners * 0.2 * fnCost) + (totalNonChurners * 0.15 * fpCost);
             const data = {
                 labels: ['Baseline (Rule-Based)', 'ML Pipeline'],
-                datasets: [{
-                    label: 'Total Estimated Loss ($)',
-                    data: [baseCost, mlCost],
-                    backgroundColor: ['#78716c', '#ea580c'], // stone-500, orange-600
-                    borderRadius: 6
-                }]
+                datasets: [{ label: 'Total Estimated Loss ($)', data: [baseCost, mlCost], backgroundColor: ['#78716c', '#ea580c'], borderRadius: 6 }]
             };
+            if (roiChart) { roiChart.data = data; roiChart.update(); return; }
+            roiChart = new Chart(document.getElementById('roiChart').getContext('2d'), {
+                type: 'bar', data: data,
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Estimated Cost ($)' } } },
+                    plugins: { tooltip: { callbacks: { label: ctx => ` $${ctx.raw.toLocaleString()}` } } }
+                }
+            });
+        }
 
-            if (roiChart) {
-                roiChart.data = data;
-                roiChart.update();
-            } else {
-                const ctx = document.getElementById('roiChart').getContext('2d');
-                roiChart = new Chart(ctx, {
-                    type: 'bar',
-                    data: data,
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: { display: true, text: 'Estimated Cost ($)' }
-                            }
-                        },
-                        plugins: {
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        return ` $${context.raw.toLocaleString()}`;
-                                    }
-                                }
-                            }
-                        }
-                    }
+        // ── MLflow UI Tab Switching ──────────────────────────────
+        function switchMlflowTab(tab) {
+            document.querySelectorAll('.mlflow-tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.mlflow-tab-panel').forEach(el => el.classList.remove('active'));
+            document.querySelector(`.mlflow-tab[data-tab="${tab}"]`).classList.add('active');
+            document.getElementById(`mlflow-panel-${tab}`).classList.add('active');
+        }
+
+        // ── Code Tab Switching ───────────────────────────────────
+        function switchCodeTab(tab) {
+            document.querySelectorAll('.code-tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('[id^="codepanel-"]').forEach(el => el.classList.remove('active'));
+            document.querySelector(`.code-tab[data-codetab="${tab}"]`).classList.add('active');
+            document.getElementById(`codepanel-${tab}`).classList.add('active');
+        }
+
+        // ── API Demo Simulation ──────────────────────────────────
+        function simulateApiCall() {
+            const textarea = document.getElementById('api-request');
+            const responseDiv = document.getElementById('api-response');
+            const statusEl = document.getElementById('api-status');
+
+            statusEl.textContent = 'Sending...';
+            statusEl.className = 'text-xs text-yellow-400 font-mono';
+            responseDiv.innerHTML = '<span class="text-stone-500">Processing request...</span>';
+
+            setTimeout(() => {
+                try {
+                    const data = JSON.parse(textarea.value);
+                    let prob = 0.12;
+                    if (data.Contract === "Month-to-month") prob += 0.32;
+                    if ((data.tenure || 0) < 12) prob += 0.14;
+                    else if ((data.tenure || 0) < 24) prob += 0.05;
+                    if (data.InternetService === "Fiber optic") prob += 0.10;
+                    if (data.OnlineSecurity === "No" || data.OnlineSecurity === "No internet service") prob += 0.05;
+                    if (data.TechSupport === "No" || data.TechSupport === "No internet service") prob += 0.05;
+                    if ((data.MonthlyCharges || 0) > 70) prob += 0.06;
+                    if (data.PaperlessBilling === "Yes") prob += 0.03;
+                    prob = Math.min(Math.max(prob, 0.01), 0.97);
+                    prob = Math.round(prob * 1000000) / 1000000;
+
+                    const riskLevel = prob >= 0.5 ? 'HIGH' : prob >= 0.3 ? 'MEDIUM' : 'LOW';
+                    const riskColor = prob >= 0.5 ? '#ef4444' : prob >= 0.3 ? '#f59e0b' : '#22c55e';
+
+                    statusEl.textContent = '200 OK';
+                    statusEl.className = 'text-xs text-green-400 font-mono';
+                    const json = JSON.stringify({ churn_probability: prob, churn: prob >= 0.5 }, null, 2);
+                    responseDiv.innerHTML =
+                        '<span class="text-gray-500">HTTP/1.1 200 OK</span>\n' +
+                        '<span class="text-gray-500">content-type: application/json</span>\n\n' +
+                        json +
+                        '\n\n<span class="text-gray-500">──────────────────────────</span>\n' +
+                        `<span style="color:${riskColor}; font-weight:bold;">Risk Level: ${riskLevel}</span>\n` +
+                        `<span class="text-gray-400">Probability: ${(prob * 100).toFixed(2)}%</span>\n` +
+                        `<span class="text-gray-400">Action: ${prob >= 0.5 ? 'Trigger retention campaign' : prob >= 0.3 ? 'Monitor closely' : 'No action needed'}</span>`;
+                } catch (e) {
+                    statusEl.textContent = '400 Bad Request';
+                    statusEl.className = 'text-xs text-red-400 font-mono';
+                    responseDiv.innerHTML = '<span class="text-red-400">Error: Invalid JSON</span>\n' + e.message;
+                }
+            }, 400);
+        }
+
+        // ── API Demo Presets ─────────────────────────────────────
+        const apiPresets = {
+            low: {
+                SeniorCitizen: 0, Partner: "Yes", Dependents: "Yes", tenure: 60,
+                PhoneService: "Yes", MultipleLines: "Yes", InternetService: "DSL",
+                OnlineSecurity: "Yes", OnlineBackup: "Yes", DeviceProtection: "Yes",
+                TechSupport: "Yes", StreamingTV: "Yes", StreamingMovies: "No",
+                Contract: "Two year", PaperlessBilling: "No",
+                PaymentMethod: "Bank transfer (automatic)",
+                MonthlyCharges: 85.50, TotalCharges: 5130.00
+            },
+            medium: {
+                SeniorCitizen: 0, Partner: "Yes", Dependents: "No", tenure: 24,
+                PhoneService: "Yes", MultipleLines: "No", InternetService: "DSL",
+                OnlineSecurity: "No", OnlineBackup: "Yes", DeviceProtection: "No",
+                TechSupport: "No", StreamingTV: "Yes", StreamingMovies: "No",
+                Contract: "One year", PaperlessBilling: "Yes",
+                PaymentMethod: "Mailed check",
+                MonthlyCharges: 65.20, TotalCharges: 1564.80
+            },
+            high: {
+                SeniorCitizen: 1, Partner: "No", Dependents: "No", tenure: 3,
+                PhoneService: "Yes", MultipleLines: "No", InternetService: "Fiber optic",
+                OnlineSecurity: "No", OnlineBackup: "No", DeviceProtection: "No",
+                TechSupport: "No", StreamingTV: "No", StreamingMovies: "No",
+                Contract: "Month-to-month", PaperlessBilling: "Yes",
+                PaymentMethod: "Electronic check",
+                MonthlyCharges: 75.10, TotalCharges: 225.30
+            }
+        };
+
+        function loadPreset(type) {
+            document.getElementById('api-request').value = JSON.stringify(apiPresets[type], null, 2);
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.style.borderColor = '');
+            event.target.style.borderColor = '#ea580c';
+            simulateApiCall();
+        }
+
+        // ── Sortable Runs Table ──────────────────────────────────
+        let sortDirection = {};
+        function sortRunsTable(colIdx) {
+            const tbody = document.getElementById('runs-tbody');
+            if (!tbody) return;
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const dir = sortDirection[colIdx] === 'asc' ? 'desc' : 'asc';
+            sortDirection = {};
+            sortDirection[colIdx] = dir;
+
+            document.querySelectorAll('.sort-th').forEach(th => {
+                th.classList.remove('text-orange-600');
+            });
+            event.target.classList.add('text-orange-600');
+
+            rows.sort((a, b) => {
+                const cellA = a.cells[colIdx]?.textContent.trim() || '';
+                const cellB = b.cells[colIdx]?.textContent.trim() || '';
+                const numA = parseFloat(cellA);
+                const numB = parseFloat(cellB);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return dir === 'asc' ? numA - numB : numB - numA;
+                }
+                return dir === 'asc' ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+            });
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // ── Copy-to-Clipboard Buttons ────────────────────────────
+        function addCopyButtons() {
+            document.querySelectorAll('.code-block pre, [id^="codepanel-"] pre').forEach(pre => {
+                if (pre.querySelector('.copy-btn')) return;
+                const btn = document.createElement('button');
+                btn.className = 'copy-btn';
+                btn.textContent = 'Copy';
+                btn.addEventListener('click', () => {
+                    const code = pre.querySelector('code')?.textContent || pre.textContent;
+                    navigator.clipboard.writeText(code).then(() => {
+                        btn.textContent = 'Copied!';
+                        btn.classList.add('copied');
+                        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+                    });
                 });
+                pre.style.position = 'relative';
+                pre.appendChild(btn);
+            });
+        }
+
+        // ── Syntax Highlighting ──────────────────────────────────
+        function applyHighlighting() {
+            document.querySelectorAll('.code-block pre code, [id^="codepanel-"] pre code').forEach(el => {
+                hljs.highlightElement(el);
+            });
+        }
+
+        function highlightPipelineCode() {
+            const codeEl = document.querySelector('#pipeline-detail pre code');
+            if (codeEl) {
+                delete codeEl.dataset.highlighted;
+                hljs.highlightElement(codeEl);
             }
         }
 
-        // --- Initialization ---
+        // ── Init ─────────────────────────────────────────────────
         window.onload = function() {
             renderPipeline();
             initChurnChart();
+            initFoldAucChart();
+            initRadarChart();
             updateRoiChart();
-
             document.getElementById('roi-calculate-btn').addEventListener('click', updateRoiChart);
-        };
 
+            applyHighlighting();
+            addCopyButtons();
+        };
     </script>
 </body>
 </html>

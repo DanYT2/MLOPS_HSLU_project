@@ -1,0 +1,23 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: project/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+    depends_on:
+      - mlflow
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./mlflow.db:/mlflow/mlflow.db
+      - ./mlruns:/mlflow/mlruns
