@@ -91,8 +91,6 @@ class CustomerData(BaseModel):
 class PredictionResponse(BaseModel):
     churn_probability: float
     churn: bool
-    lgbm_probability: float
-    xgb_probability: float
 
 
 class BatchPredictionResponse(BaseModel):
