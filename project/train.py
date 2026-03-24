@@ -470,7 +470,7 @@ def train_ensemble(
     test: pd.DataFrame,
     best_lgbm_params: dict,
     best_xgb_params: dict,
-) -> tuple[list, list, np.ndarray, list[str]]:
+) -> tuple[list, list, np.ndarray, list[str], float]:
     """Train a LightGBM + XGBoost ensemble using stratified K-fold CV.
 
     For each of the K folds, both a LightGBM and an XGBoost model are trained
@@ -490,11 +490,12 @@ def train_ensemble(
         best_xgb_params: Optimized XGBoost hyperparameters from Optuna.
 
     Returns:
-        A tuple of (lgb_models, xgb_models, final_test_preds, feature_list):
+        A tuple of (lgb_models, xgb_models, final_test_preds, feature_list, ensemble_mean_cv_auc):
         - lgb_models: list of 5 trained LightGBM models (one per fold)
         - xgb_models: list of 5 trained XGBoost models (one per fold)
         - final_test_preds: numpy array of averaged ensemble churn probabilities
         - feature_list: ordered list of feature column names
+        - ensemble_mean_cv_auc: combined mean CV AUC of the ensemble (used for champion comparison)
     """
     # Create the stratified K-fold splitter. "Stratified" means each fold
     # preserves the percentage of samples for each class (churn vs no churn).
@@ -805,6 +806,13 @@ def train_ensemble(
     })
     mlflow.log_text(metrics_df.to_csv(index=False), "cv_fold_metrics.csv")
 
+    # Compute the ensemble's combined mean CV AUC as the average of both model
+    # types' mean AUCs. This single number represents the overall quality of the
+    # ensemble and is used by register_model() to decide whether this run should
+    # replace the current champion in the Model Registry.
+    ensemble_mean_cv_auc = (np.mean(lgb_val_aucs) + np.mean(xgb_val_aucs)) / 2
+    mlflow.log_metric("ensemble_mean_cv_auc", ensemble_mean_cv_auc)
+
     # Final ensemble prediction: average the LightGBM and XGBoost fold-averaged
     # predictions. This is a "simple average" ensemble — each model type gets
     # equal weight. Ensembling two different algorithms (LightGBM is leaf-wise,
@@ -844,7 +852,7 @@ def train_ensemble(
     print(f"{'='*60}")
 
     feature_list = list(X.columns)
-    return lgb_models, xgb_models, final_test_preds, feature_list
+    return lgb_models, xgb_models, final_test_preds, feature_list, ensemble_mean_cv_auc
 
 
 # ── 5. MLflow pyfunc wrapper & model registration ───────────────
@@ -929,25 +937,74 @@ class ChurnEnsembleModel(mlflow.pyfunc.PythonModel):
         return (lgb_probs + xgb_probs) / 2
 
 
+def _get_champion_auc() -> float | None:
+    """Query the current champion model's ensemble_mean_cv_auc from MLflow.
+
+    Looks up the "champion" alias in the Model Registry, finds the MLflow run
+    that produced it, and reads its ensemble_mean_cv_auc metric. This is the
+    metric the new run must beat to be promoted.
+
+    Returns:
+        The champion's ensemble_mean_cv_auc, or None if:
+        - No model is registered yet (first run)
+        - The champion alias doesn't exist
+        - The champion's run has no ensemble_mean_cv_auc metric (legacy run
+          from before this comparison logic was added)
+    """
+    try:
+        client = mlflow.tracking.MlflowClient()
+
+        # get_model_version_by_alias looks up which version number the
+        # "champion" alias currently points to, and returns its metadata
+        # including the run_id that produced it.
+        champion_version = client.get_model_version_by_alias(
+            name=REGISTERED_MODEL_NAME,
+            alias="champion",
+        )
+
+        # Fetch the full run data for the champion's producing run.
+        # run.data.metrics is a dict of {metric_name: latest_value}.
+        champion_run = client.get_run(champion_version.run_id)
+        champion_auc = champion_run.data.metrics.get("ensemble_mean_cv_auc")
+
+        return champion_auc
+
+    except Exception:
+        # Any failure (model not registered, alias not set, run deleted, etc.)
+        # means there's no valid champion to compare against.
+        return None
+
+
 def register_model(
     lgb_models: list,
     xgb_models: list,
     feature_list: list[str],
     best_params: dict,
+    new_auc: float,
 ) -> None:
-    """Serialize all fold models and register the ensemble in MLflow Model Registry.
+    """Serialize all fold models, register in MLflow, and conditionally promote.
 
-    The Model Registry is MLflow's central hub for model versioning and
-    lifecycle management. Registering a model creates a named entry that
-    can be loaded by URI (e.g. "models:/CustomerChurnEnsemble@champion").
-    The "champion" alias acts like a pointer to the production-ready version.
+    The model is always registered as a new version in the Model Registry
+    (for auditability — every training run is preserved). However, the
+    "champion" alias is only reassigned if the new model's ensemble_mean_cv_auc
+    exceeds the current champion's. This prevents a regression from reaching
+    production.
+
+    If there is no existing champion (first run, or the champion alias was
+    removed), the new model is promoted unconditionally.
 
     Args:
         lgb_models: List of 5 trained LightGBM models.
         xgb_models: List of 5 trained XGBoost models.
         feature_list: Ordered list of feature column names.
         best_params: Dictionary containing the best parameters for both model types.
+        new_auc: The new run's ensemble_mean_cv_auc to compare against the champion.
     """
+    # ── Query the current champion's AUC before registering ──────
+    # We do this first so the comparison is against the champion that existed
+    # before this run, not against our own newly registered version.
+    champion_auc = _get_champion_auc()
+
     # Use a temporary directory that's automatically cleaned up when done.
     # We need a staging area to write files that MLflow will then copy into
     # its artifact store.
@@ -989,25 +1046,58 @@ def register_model(
         )
 
     # register_model promotes the logged model artifact into the Model Registry.
-    # This creates a new version under the given name (version numbers auto-increment).
+    # This always creates a new version (version numbers auto-increment) regardless
+    # of whether the model becomes champion — every run is preserved for auditability.
     registered = mlflow.register_model(
         model_uri=model_info.model_uri,
         name=REGISTERED_MODEL_NAME,
     )
 
-    # Set the "champion" alias on the newly registered version. Aliases are
-    # mutable pointers — the web service loads "models:/CustomerChurnEnsemble@champion",
-    # so updating this alias is how you promote a new model to production
-    # without changing any code in the serving layer.
-    client = mlflow.tracking.MlflowClient()
-    client.set_registered_model_alias(
-        name=REGISTERED_MODEL_NAME,
-        alias="champion",
-        version=registered.version,
-    )
+    print(f"\nRegistered {REGISTERED_MODEL_NAME} v{registered.version}")
 
-    print(f"\nRegistered {REGISTERED_MODEL_NAME} v{registered.version} "
-          f"with alias 'champion'")
+    # ── Champion promotion decision ──────────────────────────────
+    # Compare the new model's AUC against the existing champion. The alias
+    # is only moved if the new model is strictly better, preventing performance
+    # regressions from reaching production. Three cases:
+    #
+    #   1. No existing champion (first run or legacy) → promote unconditionally
+    #   2. New AUC > champion AUC                     → promote (improvement)
+    #   3. New AUC <= champion AUC                     → keep existing champion
+    client = mlflow.tracking.MlflowClient()
+
+    if champion_auc is None:
+        # Case 1: no existing champion to compare against. This happens on
+        # the very first training run, or if the champion was from a legacy
+        # run that didn't log ensemble_mean_cv_auc. Promote unconditionally.
+        client.set_registered_model_alias(
+            name=REGISTERED_MODEL_NAME,
+            alias="champion",
+            version=registered.version,
+        )
+        print(f"  → No existing champion found. "
+              f"Promoted v{registered.version} as champion (AUC={new_auc:.6f})")
+
+    elif new_auc > champion_auc:
+        # Case 2: the new model outperforms the current champion. Move the
+        # "champion" alias to point to the new version. The web service will
+        # pick up this new model on its next restart.
+        client.set_registered_model_alias(
+            name=REGISTERED_MODEL_NAME,
+            alias="champion",
+            version=registered.version,
+        )
+        print(f"  → New model BEATS champion! "
+              f"AUC: {new_auc:.6f} > {champion_auc:.6f}")
+        print(f"  → Promoted v{registered.version} as new champion")
+
+    else:
+        # Case 3: the new model is equal or worse. Keep the existing champion.
+        # The new version is still in the registry for inspection, but it
+        # won't be served by the web service.
+        print(f"  → New model did NOT beat champion. "
+              f"AUC: {new_auc:.6f} <= {champion_auc:.6f}")
+        print(f"  → Champion unchanged. v{registered.version} registered "
+              f"but NOT promoted.")
 
 
 # ── main ─────────────────────────────────────────────────────────
@@ -1068,7 +1158,7 @@ def main() -> None:
     )
 
     print("Training ensemble …")
-    lgb_models, xgb_models, final_test_preds, feature_list = train_ensemble(
+    lgb_models, xgb_models, final_test_preds, feature_list, ensemble_auc = train_ensemble(
         X, y, test, best_lgbm_params, best_xgb_params
     )
 
@@ -1086,7 +1176,7 @@ def main() -> None:
     # Package both model types' best params into a single dict for
     # the model registry artifact (documentation/reproducibility)
     best_params = {"lgbm": best_lgbm_params, "xgb": best_xgb_params}
-    register_model(lgb_models, xgb_models, feature_list, best_params)
+    register_model(lgb_models, xgb_models, feature_list, best_params, ensemble_auc)
 
     # Capture the run ID before ending the run (after end_run, active_run is None)
     run_id = mlflow.active_run().info.run_id
