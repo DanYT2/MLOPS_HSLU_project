@@ -21,3 +21,29 @@ services:
     volumes:
       - ./mlflow.db:/mlflow/mlflow.db
       - ./mlruns:/mlflow/mlruns
+
+  prefect-server:
+    image: prefecthq/prefect:3-python3.12
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./prefect-data:/root/.prefect
+
+  prefect-worker:
+    build:
+      context: ..
+      dockerfile: project/Dockerfile.worker
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+      - DATA_DIR=/app/dataset
+      - OUTPUT_DIR=/app/predictions
+    depends_on:
+      - prefect-server
+      - mlflow
+    volumes:
+      - ./prefect-data:/root/.prefect
+      - ./dataset:/app/dataset
+      - ./predictions:/app/predictions
+      - ./mlruns:/mlflow/mlruns
