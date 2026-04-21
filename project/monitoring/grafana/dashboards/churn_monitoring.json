@@ -1,0 +1,360 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "churn-monitoring",
+  "title": "Customer Churn Monitoring",
+  "tags": ["mlops", "churn", "evidently"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Latest ROC AUC (train_holdout)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.7 },
+              { "color": "green", "value": 0.8 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "table",
+          "rawSql": "SELECT roc_auc FROM monitoring_metrics WHERE data_source = 'train_holdout' AND roc_auc IS NOT NULL ORDER BY ts DESC LIMIT 1;"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Latest Accuracy (train_holdout)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.7 },
+              { "color": "green", "value": 0.8 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "table",
+          "rawSql": "SELECT accuracy FROM monitoring_metrics WHERE data_source = 'train_holdout' AND accuracy IS NOT NULL ORDER BY ts DESC LIMIT 1;"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Latest # Drifted Columns",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 3 },
+              { "color": "red", "value": 6 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "table",
+          "rawSql": "SELECT num_drifted_columns FROM monitoring_metrics ORDER BY ts DESC LIMIT 1;"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total Batches Scored",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS c FROM monitoring_metrics;"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Number of Drifted Columns",
+      "description": "Count of features whose distribution has drifted from the reference set, per batch.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto" },
+          "decimals": 0
+        }
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS \"time\", data_source AS metric, num_drifted_columns AS value FROM monitoring_metrics WHERE $__timeFilter(ts) ORDER BY ts;"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Share of Drifted Columns",
+      "description": "Fraction of features drifting. A sustained value above 0.5 typically warrants retraining.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto" },
+          "decimals": 3,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.3 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS \"time\", data_source AS metric, share_drifted_columns AS value FROM monitoring_metrics WHERE $__timeFilter(ts) ORDER BY ts;"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Prediction Drift (churn_probability)",
+      "description": "Distribution drift score for the churn probability stream (PSI / Wasserstein depending on sample size).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto" },
+          "decimals": 4
+        }
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS \"time\", data_source AS metric, prediction_drift AS value FROM monitoring_metrics WHERE $__timeFilter(ts) ORDER BY ts;"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Share of Missing Values",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto" },
+          "decimals": 4,
+          "min": 0,
+          "max": 1
+        }
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS \"time\", data_source AS metric, share_missing_values AS value FROM monitoring_metrics WHERE $__timeFilter(ts) ORDER BY ts;"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Predicted vs Actual Churn Rate (train_holdout)",
+      "description": "Model calibration: average predicted churn probability vs. the realised churn rate in the batch.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto" },
+          "decimals": 3,
+          "min": 0,
+          "max": 1
+        }
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS \"time\", 'mean_predicted' AS metric, mean_predicted_churn_prob AS value FROM monitoring_metrics WHERE data_source = 'train_holdout' AND $__timeFilter(ts) UNION ALL SELECT ts AS \"time\", 'churn_rate' AS metric, churn_rate AS value FROM monitoring_metrics WHERE data_source = 'train_holdout' AND $__timeFilter(ts) ORDER BY 1;"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Model Quality (train_holdout)",
+      "description": "Classification metrics computed against batches where Churn is known.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto" },
+          "decimals": 4
+        }
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS \"time\", 'accuracy' AS metric, accuracy AS value FROM monitoring_metrics WHERE data_source = 'train_holdout' AND $__timeFilter(ts) UNION ALL SELECT ts, 'roc_auc', roc_auc FROM monitoring_metrics WHERE data_source = 'train_holdout' AND $__timeFilter(ts) UNION ALL SELECT ts, 'log_loss', log_loss FROM monitoring_metrics WHERE data_source = 'train_holdout' AND $__timeFilter(ts) ORDER BY 1;"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Recent Batches",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 28 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto" }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "table",
+          "rawSql": "SELECT ts, data_source, batch_id, batch_size, num_drifted_columns, share_drifted_columns, prediction_drift, share_missing_values, mean_predicted_churn_prob, churn_rate, accuracy, roc_auc, log_loss FROM monitoring_metrics ORDER BY ts DESC LIMIT 20;"
+        }
+      ]
+    }
+  ]
+}
