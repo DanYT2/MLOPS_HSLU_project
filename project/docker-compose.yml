@@ -11,6 +11,12 @@ services:
       - ./mlruns:/mlflow/mlruns
     depends_on:
       - mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys,json;r=urllib.request.urlopen('http://localhost:8000/');sys.exit(0 if json.load(r).get('status') else 1)"]
+      interval: 1s
+      timeout: 2s
+      retries: 3
+      start_period: 30s
 
   mlflow:
     build:
@@ -21,3 +27,82 @@ services:
     volumes:
       - ./mlflow.db:/mlflow/mlflow.db
       - ./mlruns:/mlflow/mlruns
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: monitor
+      POSTGRES_PASSWORD: monitor
+      POSTGRES_DB: monitoring
+    ports:
+      - "5431:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./monitoring/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitor -d monitoring"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  adminer:
+    image: adminer:5
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana-oss:11.3.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  monitor:
+    build:
+      context: ..
+      dockerfile: project/monitoring/Dockerfile.monitor
+    restart: on-failure
+    environment:
+      API_URL: http://api:8000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: monitor
+      POSTGRES_PASSWORD: monitor
+      POSTGRES_DB: monitoring
+      DATASET_DIR: /app/dataset
+      BATCH_SIZE: "1000"
+      INTERVAL_SECONDS: "10"
+      REFERENCE_FRAC: "0.2"
+      RUN_ONCE: "0"
+      LOOP_FOREVER: "0"
+    volumes:
+      - ./dataset:/app/dataset:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  grafana-data:
