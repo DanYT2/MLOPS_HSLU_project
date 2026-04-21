@@ -28,8 +28,9 @@ uv sync
 | [`project/train.py`](project/train.py) | End-to-end training: load data → feature engineering → Optuna → CV ensemble → register `CustomerChurnEnsemble` → `submission.csv` |
 | [`project/web_service.py`](project/web_service.py) | FastAPI app; loads `models:/CustomerChurnEnsemble@champion` from MLflow |
 | [`project/schemas/`](project/schemas/) | Pydantic request and response models |
-| [`project/docker-compose.yml`](project/docker-compose.yml) | API on port **8000** and MLflow on **5001** |
-| [`project/docs/`](project/docs/) | Deep dives: [TRAIN.md](project/docs/TRAIN.md), [WEB_SERVICE.md](project/docs/WEB_SERVICE.md), [SCHEMAS.md](project/docs/SCHEMAS.md) |
+| [`project/docker-compose.yml`](project/docker-compose.yml) | API on **8000**, MLflow on **5001**, Postgres on **5432**, Adminer on **8080**, Grafana on **3000** |
+| [`project/monitoring/`](project/monitoring/) | Evidently-based drift + performance monitoring (Dockerfile, Grafana provisioning, Postgres schema) |
+| [`project/docs/`](project/docs/) | Deep dives: [TRAIN.md](project/docs/TRAIN.md), [WEB_SERVICE.md](project/docs/WEB_SERVICE.md), [SCHEMAS.md](project/docs/SCHEMAS.md), [MONITORING.md](project/docs/MONITORING.md) |
 | [`project/customer-churn-eda-multimodelensemble.ipynb`](project/customer-churn-eda-multimodelensemble.ipynb) | EDA and exploratory modeling |
 
 ## Data
@@ -56,7 +57,7 @@ Typical outputs and artifacts (details in [TRAIN.md](project/docs/TRAIN.md)):
 - **`project/optuna_studies.db`** (Optuna studies)
 - Metrics and artifacts in MLflow (artifact root as configured on the server)
 
-### Docker Compose (MLflow + API)
+### Docker Compose (MLflow + API + Monitoring)
 
 From `project/`:
 
@@ -66,6 +67,11 @@ cd project && docker compose up --build
 
 - MLflow UI / API: **http://localhost:5001**
 - FastAPI: **http://localhost:8000** (sets `MLFLOW_TRACKING_URI=http://mlflow:5001` for the API container)
+- Grafana: **http://localhost:3000** (anonymous viewer; admin / admin to edit)
+- Adminer: **http://localhost:8080** (system `PostgreSQL`, server `postgres`, user/password/db = `monitor`/`monitor`/`monitoring`)
+- Postgres: **localhost:5432** (`postgresql://monitor:monitor@localhost:5432/monitoring`)
+
+The `monitor` service replays `dataset/train.csv` (stratified 80/20 reference split) and `dataset/test.csv` through `/predict/batch` and writes Evidently drift + classification metrics to the `monitoring_metrics` Postgres table. See [project/docs/MONITORING.md](project/docs/MONITORING.md) for the full pipeline, dashboard layout, and tunable env vars.
 
 ## Running the API locally
 
@@ -127,6 +133,16 @@ flowchart LR
     Model --> API
   end
   Registry -.->|champion model| Model
+  subgraph monitoring [Monitoring]
+    Monitor[monitor loop]
+    PG[(postgres)]
+    Adminer[adminer]
+    Grafana[grafana]
+    Monitor --> PG
+    PG --> Adminer
+    PG --> Grafana
+  end
+  API --> Monitor
 ```
 
 ## Development
@@ -143,3 +159,4 @@ uv run ruff format .
 - [Training pipeline](project/docs/TRAIN.md) — functions, constants, HPO spaces, CV, registration
 - [Web service](project/docs/WEB_SERVICE.md) — endpoints, preprocessing parity with training, Docker path handling
 - [Pydantic schemas](project/docs/SCHEMAS.md) — enums and request/response models
+- [Monitoring pipeline](project/docs/MONITORING.md) — Evidently + Postgres + Adminer + Grafana
