@@ -1,75 +1,123 @@
+# Local orchestration for the churn prediction stack.
+#
+# The compose file starts the model-serving API, MLflow tracking server,
+# monitoring database, Grafana dashboard, Adminer database UI, and the monitoring
+# replay worker. Service names are intentionally used as hostnames inside the
+# Docker network (for example, the API reaches MLflow at http://mlflow:5001).
 services:
+  # FastAPI prediction service. It loads the registered MLflow model and exposes
+  # the single-row and batch prediction endpoints consumed by the monitor.
   api:
     build:
+      # Build from the repository root so Dockerfile.api can copy shared project
+      # files such as pyproject.toml, uv.lock, schemas, and web_service.py.
       context: ..
       dockerfile: project/Dockerfile.api
     ports:
+      # Expose the API on the host for browser/curl testing while containers use
+      # the internal service name ``api:8000``.
       - "8000:8000"
     environment:
+      # Use the Compose service hostname so the API talks to the colocated MLflow
+      # server instead of a host-local process.
       - MLFLOW_TRACKING_URI=http://mlflow:5001
     volumes:
+      # Share model artifacts with the MLflow service. This lets the API resolve
+      # runs/artifacts produced or served from the local mlruns directory.
       - ./mlruns:/mlflow/mlruns
     depends_on:
+      # Start MLflow before the API container. The API healthcheck below still
+      # provides the stronger "model has loaded" readiness signal for dependents.
       - mlflow
     healthcheck:
+      # The root endpoint reports a JSON status; dependent services should wait
+      # until the API process is alive and can answer HTTP requests.
       test: ["CMD", "python", "-c", "import urllib.request,sys,json;r=urllib.request.urlopen('http://localhost:8000/');sys.exit(0 if json.load(r).get('status') else 1)"]
       interval: 1s
       timeout: 2s
       retries: 3
       start_period: 30s
 
+  # Local MLflow tracking and artifact server used by the API image. It stores
+  # tracking metadata in SQLite and artifacts in the mounted mlruns directory.
   mlflow:
     build:
+      # This Dockerfile lives inside project/, so the build context can be the
+      # project directory rather than the repository root.
       context: .
       dockerfile: Dockerfile.mlflow
     ports:
+      # MLflow listens on 5001 instead of the default 5000 to avoid conflicts
+      # with other local services and match MLFLOW_TRACKING_URI above.
       - "5001:5001"
     volumes:
+      # Persist the SQLite backend store and artifact directory between container
+      # restarts so experiment metadata and model artifacts survive rebuilds.
       - ./mlflow.db:/mlflow/mlflow.db
       - ./mlruns:/mlflow/mlruns
 
+  # Metrics database for the monitoring pipeline. The monitor writes one row per
+  # replayed batch, and Grafana queries those rows for dashboard panels.
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
+      # Development credentials for the local monitoring database. These values
+      # are intentionally repeated in the monitor service so both containers agree
+      # on the database name and role.
       POSTGRES_USER: monitor
       POSTGRES_PASSWORD: monitor
       POSTGRES_DB: monitoring
     ports:
+      # Host port 5431 avoids clashing with a developer's local Postgres on 5432.
+      # Containers still connect to postgres:5432 inside the Compose network.
       - "5431:5432"
     volumes:
+      # pgdata persists database files, while init.sql creates the monitoring
+      # schema/table automatically on first database initialization.
       - pgdata:/var/lib/postgresql/data
       - ./monitoring/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
+      # Downstream services use this healthcheck so they do not start querying
+      # before Postgres has created the requested database.
       test: ["CMD-SHELL", "pg_isready -U monitor -d monitoring"]
       interval: 5s
       timeout: 5s
       retries: 20
 
+  # Lightweight web UI for inspecting the monitoring Postgres database during
+  # development. It is not used by the application path.
   adminer:
     image: adminer:5
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
+      # Preselect the Compose Postgres service and a dark theme in the Adminer UI.
       ADMINER_DEFAULT_SERVER: postgres
       ADMINER_DESIGN: dracula
     depends_on:
       postgres:
         condition: service_healthy
 
+  # Grafana dashboard for the monitoring_metrics table. Provisioning files under
+  # monitoring/grafana define the Postgres datasource and dashboard JSON.
   grafana:
     image: grafana/grafana-oss:11.3.0
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
+      # Local demo credentials and anonymous viewer access make the dashboard
+      # easy to open in a browser without extra setup.
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     volumes:
+      # Persist Grafana state, then mount provisioning and dashboard definitions
+      # read-only so container startup recreates the expected local dashboard.
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -77,32 +125,49 @@ services:
       postgres:
         condition: service_healthy
 
+  # Batch replay and monitoring worker. It waits for Postgres and the API,
+  # scores CSV batches through /predict/batch, computes Evidently metrics, and
+  # inserts monitoring rows for Grafana to visualize.
   monitor:
     build:
+      # Build from the repository root because Dockerfile.monitor copies files
+      # from project/monitoring.
       context: ..
       dockerfile: project/monitoring/Dockerfile.monitor
     restart: on-failure
     environment:
+      # Container-to-container addresses and credentials for the services above.
       API_URL: http://api:8000
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: monitor
       POSTGRES_PASSWORD: monitor
       POSTGRES_DB: monitoring
+      # Runtime knobs for the replay simulator. BATCH_SIZE controls how many rows
+      # are scored per iteration; INTERVAL_SECONDS controls dashboard update
+      # cadence; REFERENCE_FRAC controls how much train.csv becomes the baseline.
       DATASET_DIR: /app/dataset
       BATCH_SIZE: "1000"
       INTERVAL_SECONDS: "10"
       REFERENCE_FRAC: "0.2"
+      # Default behavior is one full pass through train holdout and test pools.
+      # Set LOOP_FOREVER=1 to continuously replay batches during live demos.
       RUN_ONCE: "0"
       LOOP_FOREVER: "0"
     volumes:
+      # Mount CSV data read-only; the monitor should only emit metrics to
+      # Postgres, never mutate the source dataset.
       - ./dataset:/app/dataset:ro
     depends_on:
+      # The monitor relies on the database schema and a loaded API model, so it
+      # waits for both service healthchecks before starting its own loop.
       postgres:
         condition: service_healthy
       api:
         condition: service_healthy
 
 volumes:
+  # Named volumes keep service state across container recreation without storing
+  # database files inside the repository.
   pgdata:
   grafana-data:

@@ -1,14 +1,21 @@
 """Monitoring pipeline for the Customer Churn FastAPI model.
 
-Replays the training and test CSVs as simulated production batches, asks the
-FastAPI service for predictions, runs Evidently drift + quality checks against
-a held-out reference batch, and writes one row per batch into Postgres. The
-Grafana dashboard (provisioned in ``monitoring/grafana``) reads straight from
-that table.
+This module acts as a small production simulator for the churn prediction
+service. It reads the project CSV files, reserves a stable reference slice from
+the training data, then replays the remaining rows in batches. Each batch is
+sent to the running FastAPI service so the exact deployed model produces the
+prediction probabilities used by the monitoring reports.
+
+For every replayed batch, the script compares the current batch against the
+reference slice with Evidently. The resulting drift, data quality, prediction,
+and model-quality metrics are flattened into scalar values and inserted into
+Postgres. Grafana is provisioned to query that table directly, so this script is
+the bridge between the model-serving API and the observability dashboard.
 
 The loop behaves like a lightweight cron: it ticks every ``INTERVAL_SECONDS``
-until every batch from both simulation pools has been consumed (or forever, if
-``RUN_ONCE=0`` and ``LOOP_FOREVER=1``).
+until every batch from both simulation pools has been consumed. Set
+``LOOP_FOREVER=1`` to replay the pools repeatedly, or ``RUN_ONCE=1`` to force a
+single pass even if the forever flag is enabled.
 """
 from __future__ import annotations
 
@@ -34,6 +41,9 @@ from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
 from sklearn.model_selection import train_test_split
 
 # ── Logging ──────────────────────────────────────────────────────
+# Log to stdout because Docker captures container stdout/stderr. Keeping the
+# format compact makes ``docker compose logs monitor`` useful during demos while
+# still preserving timestamps for troubleshooting batch timing.
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -42,6 +52,9 @@ logging.basicConfig(
 log = logging.getLogger("monitor")
 
 # ── Config ───────────────────────────────────────────────────────
+# Runtime configuration is read from environment variables so docker-compose can
+# tune the simulator without rebuilding the image. Defaults match the service
+# names and container paths from project/docker-compose.yml.
 DATASET_DIR = Path(os.environ.get("DATASET_DIR", "/app/dataset"))
 API_URL = os.environ.get("API_URL", "http://api:8000").rstrip("/")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "1000"))
@@ -52,6 +65,8 @@ LOOP_FOREVER = os.environ.get("LOOP_FOREVER", "0") == "1"
 RANDOM_STATE = int(os.environ.get("RANDOM_STATE", "42"))
 API_WAIT_SECONDS = int(os.environ.get("API_WAIT_SECONDS", "180"))
 
+# psycopg accepts connection settings as keyword arguments. Keeping the DSN as a
+# dictionary makes it easy to reuse for the readiness probe and per-batch insert.
 PG_DSN = {
     "host": os.environ.get("POSTGRES_HOST", "postgres"),
     "port": int(os.environ.get("POSTGRES_PORT", "5432")),
@@ -60,7 +75,9 @@ PG_DSN = {
     "dbname": os.environ.get("POSTGRES_DB", "monitoring"),
 }
 
-# Features the model sees. Must match project/schemas/schemas.py::CustomerData.
+# Features the model sees. These names and broad dtypes must stay aligned with
+# project/schemas/schemas.py::CustomerData; otherwise /predict/batch rejects the
+# payload before the model can score it.
 NUMERICAL_FEATURES = [
     "SeniorCitizen",
     "tenure",
@@ -90,9 +107,15 @@ FEATURE_COLUMNS = NUMERICAL_FEATURES + CATEGORICAL_FEATURES
 # Churn is the label).
 NON_FEATURE_COLUMNS = ["id", "gender", "Churn"]
 
+# ``churn_probability`` is added after the API call. ``Churn`` comes from the
+# labeled training data and is converted from Yes/No into 1/0 before metric
+# calculation.
 PREDICTION_COL = "churn_probability"
 TARGET_COL = "Churn"
 
+# Single-row insert for the dashboard table created by monitoring/init.sql.
+# Parameter binding keeps values type-safe and avoids string interpolation for
+# nullable metrics such as test-set accuracy, which is unavailable without labels.
 INSERT_SQL = """
 INSERT INTO monitoring_metrics (
     data_source, batch_id, batch_size,
@@ -111,19 +134,33 @@ INSERT INTO monitoring_metrics (
 # ── Helpers ──────────────────────────────────────────────────────
 @dataclass
 class Pool:
-    """A simulation pool — a dataframe sliced into fixed-size batches."""
+    """Named source of replay data that can be sliced into fixed-size batches.
+
+    ``has_labels`` tells the metric layer whether it can compute supervised
+    metrics such as accuracy, ROC AUC, and log loss. The holdout slice from
+    train.csv has labels; test.csv usually does not.
+    
+    A simulation pool - a dataframe sliced into fixed-size batches.
+    """
 
     name: str
     frame: pd.DataFrame
     has_labels: bool
 
     def batches(self, batch_size: int):
+        """Yield ``(batch_id, batch_frame)`` pairs without mutating the pool."""
         for i in range(0, len(self.frame), batch_size):
             yield i // batch_size, self.frame.iloc[i : i + batch_size].copy()
 
 
 def _to_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Strip id/gender/Churn and cast numeric columns so the API validates."""
+    """Return only API input columns, normalized to the schema's expected types.
+
+    The raw CSVs contain identifiers and labels that are useful for evaluation
+    but must not be sent to the prediction endpoint. This function gives both
+    the reference scoring step and the replay loop one shared definition of the
+    payload shape.
+    """
     cols = [c for c in df.columns if c not in NON_FEATURE_COLUMNS]
     out = df[cols].copy()
     # TotalCharges/MonthlyCharges must be numeric. Some Telco variants contain
@@ -140,9 +177,13 @@ def _to_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def wait_for_api(url: str, timeout: int) -> None:
+    """Block until the FastAPI root endpoint reports that the model is loaded."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
+            # The API root returns JSON that includes a ``loaded`` flag. A plain
+            # HTTP 200 is not enough because the web process may be up before it
+            # has loaded the MLflow model artifact.
             r = requests.get(url + "/", timeout=5)
             if r.ok and r.json().get("loaded"):
                 log.info("api is up and model is loaded")
@@ -154,6 +195,7 @@ def wait_for_api(url: str, timeout: int) -> None:
 
 
 def wait_for_postgres(dsn: dict, timeout: int = 120) -> None:
+    """Block until Postgres accepts connections and can execute a trivial query."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -168,7 +210,12 @@ def wait_for_postgres(dsn: dict, timeout: int = 120) -> None:
 
 
 def predict(features: pd.DataFrame) -> np.ndarray:
-    """POST rows to /predict/batch and return a numpy array of probabilities."""
+    """POST rows to /predict/batch and return probabilities in batch order.
+
+    The monitor deliberately calls the public API instead of importing model
+    code. That keeps monitoring faithful to the deployed service contract and
+    catches serving-time schema or model-loading problems.
+    """
     records = features.to_dict(orient="records")
     resp = requests.post(f"{API_URL}/predict/batch", json=records, timeout=120)
     resp.raise_for_status()
@@ -180,8 +227,14 @@ def predict(features: pd.DataFrame) -> np.ndarray:
 def build_reference(train_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Stratified split train.csv into (reference, simulation pool).
 
-    Both frames keep the Churn label and get a ``churn_probability`` column
-    filled from the live model.
+    The reference frame represents the known-good baseline distribution used by
+    Evidently. Stratification keeps the churn/non-churn class balance stable in
+    the reference slice, which makes downstream drift and quality metrics less
+    noisy for small datasets.
+
+    The returned reference keeps labels and receives a ``churn_probability``
+    column from the live model. The returned simulation pool keeps labels too,
+    but it is scored later batch-by-batch to mimic production traffic.
     """
     log.info("loaded %d train rows; splitting %.0f%% as reference",
              len(train_df), REFERENCE_FRAC * 100)
@@ -201,6 +254,7 @@ def build_reference(train_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
 
 
 def prepare_pools(sim_train: pd.DataFrame, test_df: pd.DataFrame) -> list[Pool]:
+    """Create the labeled and unlabeled replay pools consumed by the main loop."""
     sim_train = sim_train.copy()
     sim_train[TARGET_COL] = sim_train[TARGET_COL].map({"Yes": 1, "No": 0}).astype(int)
     return [
@@ -211,6 +265,7 @@ def prepare_pools(sim_train: pd.DataFrame, test_df: pd.DataFrame) -> list[Pool]:
 
 # ── Metric extraction ────────────────────────────────────────────
 def _column_mapping(has_target: bool) -> ColumnMapping:
+    """Describe dataframe semantics for Evidently's metric calculations."""
     return ColumnMapping(
         target=TARGET_COL if has_target else None,
         prediction=PREDICTION_COL,
@@ -224,9 +279,18 @@ def compute_metrics(
     current: pd.DataFrame,
     has_labels: bool,
 ) -> dict:
-    """Run an Evidently Report and collapse it into flat scalar metrics."""
+    """Run an Evidently Report and collapse nested results into dashboard fields.
+
+    Evidently returns a rich nested report. Grafana is easier to build against a
+    narrow relational table, so this function extracts only the metrics used by
+    the dashboard and stores unavailable supervised metrics as ``None``.
+    """
     mapping = _column_mapping(has_target=has_labels)
 
+    # The report combines dataset-level drift, missing-value share, and a
+    # dedicated drift score for the model's prediction column. The prediction
+    # drift panel is useful because feature distributions can look stable while
+    # the resulting score distribution changes.
     report = Report(
         metrics=[
             DatasetDriftMetric(),
@@ -267,6 +331,9 @@ def compute_metrics(
     }
 
     if has_labels:
+        # Supervised metrics are only valid for the labeled holdout replay. The
+        # unlabeled test replay still contributes drift, missingness, and average
+        # predicted churn probability.
         y_true = current[TARGET_COL].astype(int).to_numpy()
         y_prob = current[PREDICTION_COL].astype(float).to_numpy()
         y_pred = (y_prob >= 0.5).astype(int)
@@ -283,11 +350,15 @@ def compute_metrics(
 
 # ── Main loop ────────────────────────────────────────────────────
 def run() -> None:
+    """Coordinate dependency readiness, data loading, scoring, and persistence."""
     log.info("monitor starting; api=%s pg=%s batch_size=%d interval=%ds",
              API_URL, PG_DSN["host"], BATCH_SIZE, INTERVAL_SECONDS)
     wait_for_postgres(PG_DSN)
     wait_for_api(API_URL, API_WAIT_SECONDS)
 
+    # Load the same CSV layout used by training. The id column is not predictive
+    # and is dropped early so all later feature selections operate on stable
+    # column names regardless of whether the CSV includes row identifiers.
     train_df = pd.read_csv(DATASET_DIR / "train.csv")
     test_df = pd.read_csv(DATASET_DIR / "test.csv")
     train_df = train_df.drop(columns=[c for c in ("id",) if c in train_df.columns])
@@ -296,12 +367,18 @@ def run() -> None:
     reference, sim_train = build_reference(train_df)
     pools = prepare_pools(sim_train, test_df)
 
+    # Keep a compact reference dataframe with only Evidently-relevant columns.
+    # This avoids accidentally including raw identifier or unused columns in
+    # drift calculations.
     ref_for_eval = reference[FEATURE_COLUMNS + [TARGET_COL, PREDICTION_COL]]
 
     while True:
         produced = 0
         for pool in pools:
             for batch_id, batch in pool.batches(BATCH_SIZE):
+                # Score one batch through the API, then stitch predictions back
+                # onto the raw batch so feature, target, and prediction columns
+                # remain aligned by row.
                 features = _to_features(batch)
                 try:
                     probs = predict(features)
@@ -313,6 +390,8 @@ def run() -> None:
                 current = batch.copy()
                 current[PREDICTION_COL] = probs
                 if pool.has_labels:
+                    # Labeled batches can be evaluated against a reference that
+                    # includes the target column, enabling supervised metrics.
                     current[TARGET_COL] = batch[TARGET_COL].astype(int)
                     cur_for_eval = current[FEATURE_COLUMNS + [TARGET_COL, PREDICTION_COL]]
                     ref_slice = ref_for_eval
@@ -329,6 +408,9 @@ def run() -> None:
                     batch_size=len(batch),
                 )
 
+                # Open a short-lived connection per batch. For this low-volume
+                # simulator that keeps failure handling simple and avoids stale
+                # connections if Postgres restarts during a replay.
                 with psycopg.connect(**PG_DSN) as conn, conn.cursor() as cur:
                     cur.execute(INSERT_SQL, metrics)
                     conn.commit()
@@ -346,6 +428,9 @@ def run() -> None:
                 time.sleep(INTERVAL_SECONDS)
 
         log.info("pass complete (%d batches produced)", produced)
+        # By default the monitor exits after one full replay, which is convenient
+        # for repeatable coursework/demo runs. LOOP_FOREVER turns the same code
+        # into a simple ongoing data generator.
         if RUN_ONCE:
             return
         if not LOOP_FOREVER:

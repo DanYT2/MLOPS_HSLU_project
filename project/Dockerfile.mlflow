@@ -1,13 +1,30 @@
+# Container image for the local MLflow tracking and artifact server.
+#
+# The API service points MLFLOW_TRACKING_URI at this container, and docker-compose
+# mounts both the SQLite backend store and artifact directory for persistence.
 FROM python:3.13-slim
 
+# uv is copied from its official image to install MLflow quickly without adding
+# an extra bootstrap step to the Dockerfile.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+# Install MLflow into the system Python for a compact single-purpose image. The
+# no-cache flag avoids retaining wheel/download artifacts after installation.
 RUN uv pip install mlflow --system --no-cache
 
+# MLflow reads and writes its backend database and artifacts relative to this
+# directory. docker-compose mounts mlflow.db and mlruns here.
 WORKDIR /mlflow
 
+# MLflow serves its tracking UI and REST API on this port inside the Compose
+# network and on localhost:5001 through the compose port mapping.
 EXPOSE 5001
 
+# Start MLflow as both the tracking server and artifact server. SQLite is enough
+# for this local coursework/demo stack, while /mlflow/mlruns keeps artifact paths
+# consistent between the MLflow and API containers. The allowed-hosts list
+# restricts accepted Host headers to the Compose service name and local
+# development addresses used by browsers, curl, and the API container.
 CMD [ \
     "mlflow", "server", \
     "--host", "0.0.0.0", \
