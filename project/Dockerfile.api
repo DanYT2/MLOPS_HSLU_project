@@ -1,25 +1,46 @@
+# Container image for the FastAPI churn prediction service.
+#
+# This image focuses on serving only: it installs the project dependencies,
+# copies the API entrypoint and request/response schemas, and starts FastAPI on
+# port 8000 for docker-compose and local browser/curl access.
 FROM python:3.13-slim
 
+# LightGBM and related compiled ML packages need OpenMP runtime support. The
+# package lists are removed afterward to keep the image lean.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+# uv provides fast, reproducible dependency installation from pyproject.toml and
+# uv.lock without installing a separate package manager through pip.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+# Compile bytecode during install for faster imports, copy packages instead of
+# symlinking them for container portability, and never download another Python
+# because the base image already supplies the interpreter.
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
 
+# Application working directory used by the FastAPI command below.
 WORKDIR /app
 
-# Install dependencies first (cached layer)
+# Install dependencies first as a cached layer. The project itself is not
+# installed here because this serving image copies only the files required at
+# runtime, keeping rebuilds faster when API source changes.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-# Copy application code only
+# Copy the API module and Pydantic schemas. Training notebooks, datasets, and
+# monitoring code are intentionally excluded from the serving image.
 COPY project/web_service.py ./
 COPY project/schemas/ ./schemas/
 
+# Document the container port used by FastAPI. Compose publishes this as
+# localhost:8000 for development.
 EXPOSE 8000
 
+# Start FastAPI with uv so it runs inside the resolved project environment.
+# Binding to 0.0.0.0 makes the service reachable from other containers and the
+# host port mapping.
 CMD ["uv", "run", "fastapi", "run", "web_service.py", "--host", "0.0.0.0", "--port", "8000"]

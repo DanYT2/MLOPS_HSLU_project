@@ -1,0 +1,35 @@
+# Container image for the monitoring replay worker.
+#
+# The worker is separate from the API image so monitoring dependencies such as
+# Evidently, psycopg, and pandas do not bloat the serving container.
+FROM python:3.11-slim
+
+# Keep Python container-friendly: avoid writing .pyc files, stream logs
+# immediately to Docker, and reduce pip cache/version-check noise during builds.
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# curl is useful for ad-hoc container diagnostics. --no-install-recommends keeps
+# the image small, and removing apt lists prevents stale package metadata from
+# being baked into the final layer.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# /app is the runtime directory used by the monitor command and by the
+# docker-compose dataset mount (/app/dataset).
+WORKDIR /app
+
+# Copy requirements before source code so dependency installation can be cached
+# when monitor.py changes but monitoring/requirements.txt does not.
+COPY project/monitoring/requirements.txt ./requirements.txt
+RUN pip install -r requirements.txt
+
+# Copy only the worker entrypoint. The dataset is mounted at runtime and service
+# addresses are provided through environment variables in docker-compose.yml.
+COPY project/monitoring/monitor.py ./monitor.py
+
+# Run the replay loop when the container starts.
+CMD ["python", "monitor.py"]
