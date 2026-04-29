@@ -154,6 +154,18 @@ services:
       # Set LOOP_FOREVER=1 to continuously replay batches during live demos.
       RUN_ONCE: "0"
       LOOP_FOREVER: "0"
+      # Synthetic drift injection. Defaults are OFF; flip DRIFT_MODE to one of
+      # ``gradual``, ``sustained``, or ``cycle`` to see Evidently's drift
+      # metrics rise on the Grafana dashboard. The other knobs control when
+      # drift kicks in and how aggressive the perturbations are. See
+      # monitoring/monitor.py for full semantics.
+      DRIFT_MODE: "gradual"
+      DRIFT_START_BATCH: "0"
+      DRIFT_RAMP_BATCHES: "5"
+      DRIFT_PERIOD_BATCHES: "6"
+      DRIFT_NUMERIC_SHIFT_STD: "1.5"
+      DRIFT_CATEGORICAL_SWAP_PROB: "0.4"
+      DRIFT_MISSING_RATE: "0.0"
     volumes:
       # Mount CSV data read-only; the monitor should only emit metrics to
       # Postgres, never mutate the source dataset.
