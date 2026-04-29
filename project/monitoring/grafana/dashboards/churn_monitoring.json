@@ -334,10 +334,53 @@
       ]
     },
     {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Injected Drift vs Detected Drift",
+      "description": "Synthetic drift the monitor injected into each batch (drift_intensity) overlaid on the share of columns Evidently flagged as drifted. Use this to confirm that the injection signal lines up with rises in Evidently's drift score.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "showPoints": "auto" },
+          "decimals": 3,
+          "min": 0,
+          "max": 1
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "drift_intensity" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } },
+              { "id": "custom.fillOpacity", "value": 25 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "share_drifted_columns" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT ts AS \"time\", 'drift_intensity' AS metric, drift_intensity AS value FROM monitoring_metrics WHERE $__timeFilter(ts) UNION ALL SELECT ts AS \"time\", 'share_drifted_columns' AS metric, share_drifted_columns AS value FROM monitoring_metrics WHERE $__timeFilter(ts) ORDER BY 1;"
+        }
+      ]
+    },
+    {
       "id": 20,
       "type": "table",
       "title": "Recent Batches",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 28 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 36 },
       "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
       "options": {
         "showHeader": true
@@ -352,7 +395,7 @@
           "refId": "A",
           "datasource": { "type": "postgres", "uid": "monitoring-postgres" },
           "format": "table",
-          "rawSql": "SELECT ts, data_source, batch_id, batch_size, num_drifted_columns, share_drifted_columns, prediction_drift, share_missing_values, mean_predicted_churn_prob, churn_rate, accuracy, roc_auc, log_loss FROM monitoring_metrics ORDER BY ts DESC LIMIT 20;"
+          "rawSql": "SELECT ts, data_source, batch_id, batch_size, drift_intensity, num_drifted_columns, share_drifted_columns, prediction_drift, share_missing_values, mean_predicted_churn_prob, churn_rate, accuracy, roc_auc, log_loss FROM monitoring_metrics ORDER BY ts DESC LIMIT 20;"
         }
       ]
     }
