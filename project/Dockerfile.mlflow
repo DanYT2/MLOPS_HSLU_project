@@ -2,7 +2,7 @@
 #
 # The API service points MLFLOW_TRACKING_URI at this container, and docker-compose
 # mounts both the SQLite backend store and artifact directory for persistence.
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # uv is copied from its official image to install MLflow quickly without adding
 # an extra bootstrap step to the Dockerfile.
