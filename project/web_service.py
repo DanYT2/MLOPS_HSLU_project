@@ -148,7 +148,7 @@ def _load_registry_model(model_name: str, alias: str):
             # we need to resolve it through the run and experiment metadata
             # to find the actual artifact location on disk.
             if source.startswith("models:/"):
-                model_id = source[len("models:/"):]
+                model_id = source[len("models:/") :]
                 run = client.get_run(version.run_id)
                 exp = client.get_experiment(run.info.experiment_id)
                 base = _to_container_mlruns_path(exp.artifact_location or "")
@@ -296,8 +296,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Customer Churn Prediction API",
     description=(
-        "LightGBM + XGBoost ensemble (5-fold CV) "
-        "for binary customer churn prediction."
+        "LightGBM + XGBoost ensemble (5-fold CV) for binary customer churn prediction."
     ),
     version="2.0.0",
     lifespan=lifespan,
@@ -344,6 +343,7 @@ def _predict(customers: list[CustomerData]) -> list[PredictionResponse]:
 
 
 # ── API Endpoints ────────────────────────────────────────────────
+
 
 @app.get("/")
 def health_check():

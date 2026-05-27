@@ -1,4 +1,5 @@
 """Validation tests for the request and response Pydantic models."""
+
 from __future__ import annotations
 
 import pytest

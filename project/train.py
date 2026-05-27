@@ -216,12 +216,8 @@ def engineer_features(
     # The "DSL" category is dropped (drop_first=True) and is the implicit
     # baseline — when both indicator columns are 0, the customer has DSL.
     # dtype=int converts the boolean indicators to 0/1 integers.
-    train = pd.get_dummies(
-        train, columns=ONE_HOT_COLUMNS, drop_first=True, dtype=int
-    )
-    test = pd.get_dummies(
-        test, columns=ONE_HOT_COLUMNS, drop_first=True, dtype=int
-    )
+    train = pd.get_dummies(train, columns=ONE_HOT_COLUMNS, drop_first=True, dtype=int)
+    test = pd.get_dummies(test, columns=ONE_HOT_COLUMNS, drop_first=True, dtype=int)
 
     # Binary encoding: for columns with exactly two values ("Yes"/"No"),
     # a simple map to 1/0 is cleaner than one-hot encoding (which would
@@ -274,43 +270,35 @@ def _objective_lgbm(trial: optuna.Trial, X: pd.DataFrame, y: pd.Series) -> float
         # capture more complex patterns but risk overfitting and increase
         # training time. Range 300-2000 covers conservative to aggressive.
         "n_estimators": trial.suggest_int("n_estimators", 300, 2000),
-
         # learning_rate: shrinks each tree's contribution. Lower values
         # need more trees but generalize better. Log scale is used because
         # the impact of changes is proportional (0.01→0.02 matters more
         # than 0.2→0.21). Typical sweet spot is 0.01-0.1.
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-
         # num_leaves: max number of leaves per tree. LightGBM grows trees
         # leaf-wise (unlike XGBoost's level-wise), so this directly controls
         # model complexity. More leaves = more expressive but risk overfitting.
         "num_leaves": trial.suggest_int("num_leaves", 10, 60),
-
         # max_depth: maximum depth of each tree. Limits how many sequential
         # decisions the tree can make. Prevents overly complex decision paths.
         "max_depth": trial.suggest_int("max_depth", 3, 10),
-
         # min_child_samples: minimum data points required in a leaf node.
         # Higher values prevent the model from learning patterns specific
         # to very small groups of samples (regularization against overfitting).
         "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
-
         # subsample: fraction of training data used per tree (row sampling).
         # Values <1.0 introduce randomness that reduces overfitting — each
         # tree sees a different random subset of the data (similar to bagging).
         "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-
         # colsample_bytree: fraction of features used per tree (column sampling).
         # Forces trees to work with different feature subsets, reducing
         # correlation between trees and improving ensemble diversity.
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.4, 1.0),
-
         # reg_alpha: L1 regularization (Lasso). Penalizes absolute magnitude
         # of leaf weights. Can drive some weights to exactly zero, effectively
         # performing feature selection within each tree. Log scale because
         # regularization strength has multiplicative effects.
         "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
-
         # reg_lambda: L2 regularization (Ridge). Penalizes squared magnitude
         # of leaf weights. Smooths the model by preventing any single leaf
         # from having an extreme weight. Generally more stable than L1.
@@ -358,17 +346,14 @@ def _objective_xgb(trial: optuna.Trial, X: pd.DataFrame, y: pd.Series) -> float:
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
         "subsample": trial.suggest_float("subsample", 0.5, 1.0),
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.4, 1.0),
-
         # gamma: minimum loss reduction required to make a further partition
         # on a leaf node. Acts as a pruning threshold — a split only happens
         # if it reduces the loss by at least gamma. Higher values = more
         # conservative tree growth. This parameter is XGBoost-specific and
         # has no direct equivalent in LightGBM.
         "gamma": trial.suggest_float("gamma", 0.0, 5.0),
-
         "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
         "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
-
         # These are fixed (not tuned) because they don't affect model quality
         # in a way that benefits from search — they're just configuration.
         "random_state": RANDOM_STATE,
@@ -452,8 +437,8 @@ def tune_hyperparams(
     # search space but are required for model construction.
     best_lgbm_params = study_lgbm.best_params
     best_xgb_params = {
-        **study_xgb.best_params,       # Unpack the tuned parameters
-        "random_state": RANDOM_STATE,   # Add fixed params back
+        **study_xgb.best_params,  # Unpack the tuned parameters
+        "random_state": RANDOM_STATE,  # Add fixed params back
         "eval_metric": "auc",
     }
 
@@ -565,10 +550,10 @@ def train_ensemble(
     # for each fold. The stratification ensures each fold's y distribution
     # matches the overall dataset's class distribution.
     for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  FOLD {fold + 1} / {N_SPLITS}")
         print(f"  Train: {len(train_idx):,} | Val: {len(val_idx):,}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Split the data using integer-location indexing (.iloc) with the
         # indices provided by StratifiedKFold
@@ -581,7 +566,7 @@ def train_ensemble(
         # nested=True creates a child run under the parent "Customer_Churn_Ensemble"
         # run. This organizes the MLflow UI hierarchically — you can expand the
         # parent run to see all fold-level runs underneath it.
-        with mlflow.start_run(run_name=f"LightGBM_Fold_{fold+1}", nested=True):
+        with mlflow.start_run(run_name=f"LightGBM_Fold_{fold + 1}", nested=True):
             # Log fold-specific metadata for this child run
             mlflow.log_param("model_type", "LightGBM")
             mlflow.log_param("fold", fold + 1)
@@ -644,9 +629,9 @@ def train_ensemble(
             ).sort_values("importance", ascending=False)
             fig, ax = plt.subplots(figsize=(10, 8))
             sns.barplot(data=feat_imp.head(15), x="importance", y="feature", ax=ax)
-            ax.set_title(f"LightGBM Feature Importance — Fold {fold+1}")
+            ax.set_title(f"LightGBM Feature Importance — Fold {fold + 1}")
             plt.tight_layout()
-            mlflow.log_figure(fig, f"lgbm_feature_importance_fold_{fold+1}.png")
+            mlflow.log_figure(fig, f"lgbm_feature_importance_fold_{fold + 1}.png")
             plt.close(fig)  # Close to free memory (important in loops)
 
             # Confusion matrix: a 2x2 table showing:
@@ -656,19 +641,26 @@ def train_ensemble(
             cm = confusion_matrix(y_val_fold, lgb_val_pred)
             fig, ax = plt.subplots(figsize=(6, 5))
             sns.heatmap(
-                cm, annot=True, fmt="d", cmap="Blues", ax=ax,
+                cm,
+                annot=True,
+                fmt="d",
+                cmap="Blues",
+                ax=ax,
                 xticklabels=["No Churn", "Churn"],
                 yticklabels=["No Churn", "Churn"],
             )
-            ax.set_xlabel("Predicted"); ax.set_ylabel("Actual")
-            ax.set_title(f"LightGBM Confusion Matrix — Fold {fold+1}")
+            ax.set_xlabel("Predicted")
+            ax.set_ylabel("Actual")
+            ax.set_title(f"LightGBM Confusion Matrix — Fold {fold + 1}")
             plt.tight_layout()
-            mlflow.log_figure(fig, f"lgbm_confusion_matrix_fold_{fold+1}.png")
+            mlflow.log_figure(fig, f"lgbm_confusion_matrix_fold_{fold + 1}.png")
             plt.close(fig)
 
             # Log the model in LightGBM's native format. This preserves the
             # full model structure and can be loaded back with mlflow.lightgbm.load_model.
-            mlflow.lightgbm.log_model(lgb_model, artifact_path=f"lgbm_model_fold_{fold+1}")
+            mlflow.lightgbm.log_model(
+                lgb_model, artifact_path=f"lgbm_model_fold_{fold + 1}"
+            )
 
             # Accumulate metrics for later aggregation on the parent run
             lgb_val_aucs.append(fold_lgb_auc)
@@ -691,7 +683,7 @@ def train_ensemble(
 
         # ── XGBoost ─────────────────────────────────────────────
         # Same structure as LightGBM above: train → evaluate → log → accumulate
-        with mlflow.start_run(run_name=f"XGBoost_Fold_{fold+1}", nested=True):
+        with mlflow.start_run(run_name=f"XGBoost_Fold_{fold + 1}", nested=True):
             mlflow.log_param("model_type", "XGBoost")
             mlflow.log_param("fold", fold + 1)
             mlflow.log_param("train_fold_size", len(train_idx))
@@ -723,25 +715,30 @@ def train_ensemble(
             ).sort_values("importance", ascending=False)
             fig, ax = plt.subplots(figsize=(10, 8))
             sns.barplot(data=feat_imp_xgb.head(15), x="importance", y="feature", ax=ax)
-            ax.set_title(f"XGBoost Feature Importance — Fold {fold+1}")
+            ax.set_title(f"XGBoost Feature Importance — Fold {fold + 1}")
             plt.tight_layout()
-            mlflow.log_figure(fig, f"xgb_feature_importance_fold_{fold+1}.png")
+            mlflow.log_figure(fig, f"xgb_feature_importance_fold_{fold + 1}.png")
             plt.close(fig)
 
             cm_xgb = confusion_matrix(y_val_fold, xgb_val_pred)
             fig, ax = plt.subplots(figsize=(6, 5))
             sns.heatmap(
-                cm_xgb, annot=True, fmt="d", cmap="Oranges", ax=ax,
+                cm_xgb,
+                annot=True,
+                fmt="d",
+                cmap="Oranges",
+                ax=ax,
                 xticklabels=["No Churn", "Churn"],
                 yticklabels=["No Churn", "Churn"],
             )
-            ax.set_xlabel("Predicted"); ax.set_ylabel("Actual")
-            ax.set_title(f"XGBoost Confusion Matrix — Fold {fold+1}")
+            ax.set_xlabel("Predicted")
+            ax.set_ylabel("Actual")
+            ax.set_title(f"XGBoost Confusion Matrix — Fold {fold + 1}")
             plt.tight_layout()
-            mlflow.log_figure(fig, f"xgb_confusion_matrix_fold_{fold+1}.png")
+            mlflow.log_figure(fig, f"xgb_confusion_matrix_fold_{fold + 1}.png")
             plt.close(fig)
 
-            mlflow.xgboost.log_model(xgb_model, name=f"xgb_model_fold_{fold+1}")
+            mlflow.xgboost.log_model(xgb_model, name=f"xgb_model_fold_{fold + 1}")
 
             xgb_val_aucs.append(fold_xgb_auc)
             xgb_val_accs.append(fold_xgb_acc)
@@ -784,25 +781,42 @@ def train_ensemble(
     fold_numbers = list(range(1, N_SPLITS + 1))
     ax.plot(fold_numbers, lgb_val_aucs, marker="o", label="LightGBM", linewidth=2)
     ax.plot(fold_numbers, xgb_val_aucs, marker="s", label="XGBoost", linewidth=2)
-    ax.axhline(np.mean(lgb_val_aucs), ls="--", color="tab:blue", alpha=0.5,
-               label=f"LGBM Mean: {np.mean(lgb_val_aucs):.6f}")
-    ax.axhline(np.mean(xgb_val_aucs), ls="--", color="tab:orange", alpha=0.5,
-               label=f"XGB Mean: {np.mean(xgb_val_aucs):.6f}")
-    ax.set_xlabel("Fold"); ax.set_ylabel("Validation AUC")
+    ax.axhline(
+        np.mean(lgb_val_aucs),
+        ls="--",
+        color="tab:blue",
+        alpha=0.5,
+        label=f"LGBM Mean: {np.mean(lgb_val_aucs):.6f}",
+    )
+    ax.axhline(
+        np.mean(xgb_val_aucs),
+        ls="--",
+        color="tab:orange",
+        alpha=0.5,
+        label=f"XGB Mean: {np.mean(xgb_val_aucs):.6f}",
+    )
+    ax.set_xlabel("Fold")
+    ax.set_ylabel("Validation AUC")
     ax.set_title("Per-Fold Validation AUC Comparison")
-    ax.set_xticks(fold_numbers); ax.legend()
+    ax.set_xticks(fold_numbers)
+    ax.legend()
     plt.tight_layout()
     mlflow.log_figure(fig, "cv_auc_comparison.png")
     plt.close(fig)
 
     # Save a CSV of per-fold metrics as an MLflow text artifact for easy
     # tabular review without needing to parse individual child runs
-    metrics_df = pd.DataFrame({
-        "fold": fold_numbers,
-        "lgbm_auc": lgb_val_aucs, "xgb_auc": xgb_val_aucs,
-        "lgbm_acc": lgb_val_accs, "xgb_acc": xgb_val_accs,
-        "lgbm_f1": lgb_val_f1s, "xgb_f1": xgb_val_f1s,
-    })
+    metrics_df = pd.DataFrame(
+        {
+            "fold": fold_numbers,
+            "lgbm_auc": lgb_val_aucs,
+            "xgb_auc": xgb_val_aucs,
+            "lgbm_acc": lgb_val_accs,
+            "xgb_acc": xgb_val_accs,
+            "lgbm_f1": lgb_val_f1s,
+            "xgb_f1": xgb_val_f1s,
+        }
+    )
     mlflow.log_text(metrics_df.to_csv(index=False), "cv_fold_metrics.csv")
 
     # Compute the ensemble's combined mean CV AUC as the average of both model
@@ -834,21 +848,29 @@ def train_ensemble(
     # unimodal blob near 0.5. The red dashed line marks the decision boundary.
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.hist(final_test_preds, bins=50, edgecolor="black", alpha=0.7, color="steelblue")
-    ax.set_xlabel("Predicted Churn Probability"); ax.set_ylabel("Count")
+    ax.set_xlabel("Predicted Churn Probability")
+    ax.set_ylabel("Count")
     ax.set_title("Distribution of Ensemble Test Predictions")
-    ax.axvline(0.5, color="red", ls="--", linewidth=1.5, label="Decision Boundary (0.5)")
-    ax.legend(); plt.tight_layout()
+    ax.axvline(
+        0.5, color="red", ls="--", linewidth=1.5, label="Decision Boundary (0.5)"
+    )
+    ax.legend()
+    plt.tight_layout()
     mlflow.log_figure(fig, "ensemble_prediction_distribution.png")
     plt.close(fig)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  CV Training Completed")
-    print(f"{'='*60}")
-    print(f"  LightGBM — Mean AUC: {np.mean(lgb_val_aucs):.6f} "
-          f"(+/- {np.std(lgb_val_aucs):.6f})")
-    print(f"  XGBoost  — Mean AUC: {np.mean(xgb_val_aucs):.6f} "
-          f"(+/- {np.std(xgb_val_aucs):.6f})")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
+    print(
+        f"  LightGBM — Mean AUC: {np.mean(lgb_val_aucs):.6f} "
+        f"(+/- {np.std(lgb_val_aucs):.6f})"
+    )
+    print(
+        f"  XGBoost  — Mean AUC: {np.mean(xgb_val_aucs):.6f} "
+        f"(+/- {np.std(xgb_val_aucs):.6f})"
+    )
+    print(f"{'=' * 60}")
 
     feature_list = list(X.columns)
     return lgb_models, xgb_models, final_test_preds, feature_list, ensemble_mean_cv_auc
@@ -1073,8 +1095,10 @@ def register_model(
             alias="champion",
             version=registered.version,
         )
-        print(f"  → No existing champion found. "
-              f"Promoted v{registered.version} as champion (AUC={new_auc:.6f})")
+        print(
+            f"  → No existing champion found. "
+            f"Promoted v{registered.version} as champion (AUC={new_auc:.6f})"
+        )
 
     elif new_auc > champion_auc:
         # Case 2: the new model outperforms the current champion. Move the
@@ -1085,18 +1109,21 @@ def register_model(
             alias="champion",
             version=registered.version,
         )
-        print(f"  → New model BEATS champion! "
-              f"AUC: {new_auc:.6f} > {champion_auc:.6f}")
+        print(f"  → New model BEATS champion! AUC: {new_auc:.6f} > {champion_auc:.6f}")
         print(f"  → Promoted v{registered.version} as new champion")
 
     else:
         # Case 3: the new model is equal or worse. Keep the existing champion.
         # The new version is still in the registry for inspection, but it
         # won't be served by the web service.
-        print(f"  → New model did NOT beat champion. "
-              f"AUC: {new_auc:.6f} <= {champion_auc:.6f}")
-        print(f"  → Champion unchanged. v{registered.version} registered "
-              f"but NOT promoted.")
+        print(
+            f"  → New model did NOT beat champion. "
+            f"AUC: {new_auc:.6f} <= {champion_auc:.6f}"
+        )
+        print(
+            f"  → Champion unchanged. v{registered.version} registered "
+            f"but NOT promoted."
+        )
 
 
 # ── main ─────────────────────────────────────────────────────────
@@ -1157,8 +1184,8 @@ def main() -> None:
     )
 
     print("Training ensemble …")
-    lgb_models, xgb_models, final_test_preds, feature_list, ensemble_auc = train_ensemble(
-        X, y, test, best_lgbm_params, best_xgb_params
+    lgb_models, xgb_models, final_test_preds, feature_list, ensemble_auc = (
+        train_ensemble(X, y, test, best_lgbm_params, best_xgb_params)
     )
 
     # Build the submission CSV with test IDs and the ensemble's predicted
@@ -1181,11 +1208,11 @@ def main() -> None:
     run_id = mlflow.active_run().info.run_id
     mlflow.end_run()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  Pipeline complete!")
     print(f"  Run ID : {run_id}")
     print("  mlflow ui --port 5000")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 # Standard Python idiom: only run main() when the script is executed directly

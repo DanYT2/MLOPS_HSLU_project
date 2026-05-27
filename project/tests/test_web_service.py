@@ -4,6 +4,7 @@ The real web service loads a ChurnEnsemble pyfunc model from MLflow on startup.
 We can't reach a registry in CI, so we monkeypatch ``_load_registry_model``
 before constructing the ``TestClient`` (which triggers FastAPI's lifespan).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -14,7 +15,9 @@ from fastapi.testclient import TestClient
 def client(monkeypatch, stub_model):
     import web_service
 
-    monkeypatch.setattr(web_service, "_load_registry_model", lambda *a, **kw: stub_model)
+    monkeypatch.setattr(
+        web_service, "_load_registry_model", lambda *a, **kw: stub_model
+    )
     with TestClient(web_service.app) as test_client:
         yield test_client
 
@@ -38,14 +41,18 @@ class TestHealthAndInfo:
 
 
 class TestPredict:
-    def test_single_predict_returns_stub_probability(self, client, valid_customer_payload):
+    def test_single_predict_returns_stub_probability(
+        self, client, valid_customer_payload
+    ):
         response = client.post("/predict", json=valid_customer_payload)
         assert response.status_code == 200
         body = response.json()
         assert body["churn_probability"] == pytest.approx(0.42, abs=1e-6)
         assert body["churn"] is False  # 0.42 < 0.5
 
-    def test_single_predict_rejects_invalid_payload(self, client, valid_customer_payload):
+    def test_single_predict_rejects_invalid_payload(
+        self, client, valid_customer_payload
+    ):
         valid_customer_payload["Contract"] = "forever"
         response = client.post("/predict", json=valid_customer_payload)
         assert response.status_code == 422

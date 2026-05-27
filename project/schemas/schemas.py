@@ -29,12 +29,14 @@ from pydantic import BaseModel, Field
 # plain strings) and an enum (validated against the fixed set of values).
 # This dual inheritance is the standard pattern for Pydantic/FastAPI enums.
 
+
 class YesNo(str, Enum):
     """Binary enum for columns that accept only "Yes" or "No".
 
     Used by: Partner, Dependents, PhoneService, PaperlessBilling.
     These are simple binary attributes with no conditional dependencies.
     """
+
     yes = "Yes"
     no = "No"
 
@@ -47,6 +49,7 @@ class MultipleLines(str, Enum):
     have phone service, the value is "No phone service" rather than
     a simple "No" — this encodes the dependency on PhoneService.
     """
+
     yes = "Yes"
     no = "No"
     no_phone = "No phone service"
@@ -59,6 +62,7 @@ class InternetService(str, Enum):
     technologies offered. "No" means the customer has no internet service,
     which affects several downstream service columns (see InternetDependent).
     """
+
     dsl = "DSL"
     fiber = "Fiber optic"
     no = "No"
@@ -75,6 +79,7 @@ class InternetDependent(str, Enum):
     while "No internet service" means "can't subscribe to this add-on".
     Factoring this into a single reusable enum avoids defining 6 identical enums.
     """
+
     yes = "Yes"
     no = "No"
     no_internet = "No internet service"
@@ -87,6 +92,7 @@ class Contract(str, Enum):
     One-year and two-year contracts create switching costs that reduce churn.
     This is typically one of the strongest predictive features for churn.
     """
+
     month = "Month-to-month"
     one_year = "One year"
     two_year = "Two year"
@@ -100,6 +106,7 @@ class PaymentMethod(str, Enum):
     payment methods (bank transfer, credit card) indicate higher customer
     commitment and reduce friction that might trigger churn consideration.
     """
+
     electronic = "Electronic check"
     mailed = "Mailed check"
     bank_transfer = "Bank transfer (automatic)"
@@ -107,6 +114,7 @@ class PaymentMethod(str, Enum):
 
 
 # ── Request Model ────────────────────────────────────────────────
+
 
 class CustomerData(BaseModel):
     """Pydantic model representing a single telecom customer's attributes.
@@ -139,7 +147,7 @@ class CustomerData(BaseModel):
     tenure: int = Field(ge=0)
 
     # Phone service attributes
-    PhoneService: YesNo          # Does the customer have phone service at all?
+    PhoneService: YesNo  # Does the customer have phone service at all?
     MultipleLines: MultipleLines  # Multiple phone lines (depends on PhoneService)
 
     # Internet service type and internet-dependent add-on services.
@@ -155,8 +163,8 @@ class CustomerData(BaseModel):
     StreamingMovies: InternetDependent
 
     # Billing attributes
-    Contract: Contract          # Contract term length (month-to-month, 1yr, 2yr)
-    PaperlessBilling: YesNo     # Whether the customer uses paperless billing
+    Contract: Contract  # Contract term length (month-to-month, 1yr, 2yr)
+    PaperlessBilling: YesNo  # Whether the customer uses paperless billing
     PaymentMethod: PaymentMethod  # How the customer pays
 
     # Financial attributes. Both must be non-negative.
@@ -171,31 +179,36 @@ class CustomerData(BaseModel):
     # The "examples" key provides a realistic sample payload that appears in
     # FastAPI's auto-generated Swagger UI (/docs), making it easy for developers
     # to test the API by clicking "Try it out" with pre-filled data.
-    model_config = {"json_schema_extra": {
-        "examples": [{
-            "SeniorCitizen": 0,
-            "Partner": "Yes",
-            "Dependents": "Yes",
-            "tenure": 29,
-            "PhoneService": "Yes",
-            "MultipleLines": "No",
-            "InternetService": "DSL",
-            "OnlineSecurity": "Yes",
-            "OnlineBackup": "No",
-            "DeviceProtection": "Yes",
-            "TechSupport": "Yes",
-            "StreamingTV": "No",
-            "StreamingMovies": "No",
-            "Contract": "One year",
-            "PaperlessBilling": "Yes",
-            "PaymentMethod": "Mailed check",
-            "MonthlyCharges": 60.10,
-            "TotalCharges": 1653.85,
-        }]
-    }}
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "SeniorCitizen": 0,
+                    "Partner": "Yes",
+                    "Dependents": "Yes",
+                    "tenure": 29,
+                    "PhoneService": "Yes",
+                    "MultipleLines": "No",
+                    "InternetService": "DSL",
+                    "OnlineSecurity": "Yes",
+                    "OnlineBackup": "No",
+                    "DeviceProtection": "Yes",
+                    "TechSupport": "Yes",
+                    "StreamingTV": "No",
+                    "StreamingMovies": "No",
+                    "Contract": "One year",
+                    "PaperlessBilling": "Yes",
+                    "PaymentMethod": "Mailed check",
+                    "MonthlyCharges": 60.10,
+                    "TotalCharges": 1653.85,
+                }
+            ]
+        }
+    }
 
 
 # ── Response Models ──────────────────────────────────────────────
+
 
 class PredictionResponse(BaseModel):
     """Response schema for a single customer churn prediction.
@@ -210,6 +223,7 @@ class PredictionResponse(BaseModel):
     business contexts (e.g. if the cost of missing a churner is much
     higher than a false alarm, a lower threshold would be better).
     """
+
     churn_probability: float
     churn: bool
 
@@ -221,4 +235,5 @@ class BatchPredictionResponse(BaseModel):
     predictions matches the order of customers in the input list, so
     predictions[i] corresponds to the i-th customer in the request.
     """
+
     predictions: list[PredictionResponse]

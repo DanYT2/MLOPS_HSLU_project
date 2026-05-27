@@ -402,9 +402,12 @@ produces too many false positives, lower the query suite from
    status checks (section 9).
 
 **Bump the coverage threshold:**
-Edit `--cov-fail-under=60` in `ci.yml`. The threshold should track
+Edit `--cov-fail-under=50` in `ci.yml`. The threshold should track
 realistic project coverage — bumping it ahead of test growth is a
-recipe for blocked PRs.
+recipe for blocked PRs. Most of the uncovered surface is
+`monitor.py`'s `run()` replay loop, which is exercised by
+`smoke-test.yml` (stack boot) rather than by unit tests; raise the
+floor as the unit-testable surface grows.
 
 **Bump Python:**
 Update `.python-version`, `requires-python` in `pyproject.toml`, and

@@ -4,6 +4,7 @@ We avoid exercising the loop-driver (``run()``) because it expects Postgres,
 the FastAPI service, and CSVs. Instead we exercise the deterministic helpers:
 ``DriftInjector.intensity_for`` and ``_to_features``.
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -35,7 +36,13 @@ def _build_injector(mode: str, **overrides) -> DriftInjector:
             "TechSupport": ["Yes", "No", "No internet service", "Yes", "No"],
             "StreamingTV": ["Yes", "No", "No internet service", "Yes", "No"],
             "StreamingMovies": ["Yes", "No", "No internet service", "Yes", "No"],
-            "Contract": ["Month-to-month", "One year", "Two year", "One year", "Month-to-month"],
+            "Contract": [
+                "Month-to-month",
+                "One year",
+                "Two year",
+                "One year",
+                "Month-to-month",
+            ],
             "PaperlessBilling": ["Yes"] * 5,
             "PaymentMethod": [
                 "Electronic check",
