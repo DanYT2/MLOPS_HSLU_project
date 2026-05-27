@@ -14,7 +14,52 @@ dependencies = [
     "optuna>=4.7.0",
     "prefect>=3.6.22",
     "psycopg>=3.3.3",
+    "psycopg-binary>=3.3.4",
+    "psycopg2-binary>=2.9.12",
     "ruff>=0.15.5",
     "seaborn>=0.13.2",
     "xgboost>=3.2.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.28.0",
+    "pip-audit>=2.7.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["project/tests"]
+pythonpath = ["project"]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["project"]
+omit = [
+    "project/tests/*",
+    "project/train.py",
+    "project/monitoring/grafana/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+[tool.ruff]
+exclude = [
+    "*.ipynb",
+    ".venv",
+    "mlruns",
+    "mlruns_test",
+    "project/mlruns",
+    "project/mlruns_test",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"project/train.py" = ["E702"]
+
