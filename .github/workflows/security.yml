@@ -139,7 +139,7 @@ jobs:
         # `if: always()` so SARIF still uploads when an earlier step
         # produces partial output.
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           # Distinct category per image — GitHub deduplicates findings within
