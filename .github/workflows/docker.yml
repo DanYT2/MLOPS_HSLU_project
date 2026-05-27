@@ -1,0 +1,163 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Build and push container images to GHCR
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Three images are produced from this repository — one per service in the
+# Compose stack:
+#
+#   churn-api      ← project/Dockerfile.api          (FastAPI inference server)
+#   churn-mlflow   ← project/Dockerfile.mlflow       (MLflow tracking server)
+#   churn-monitor  ← project/monitoring/Dockerfile.monitor  (Evidently replay)
+#
+# Trigger matrix:
+#
+#   push to main        → build + push tagged `main`, `sha-<short>`, `latest`
+#   push of vX.Y.Z tag  → build + push semver tags (full / minor / major); the
+#                         release.yml workflow later re-tags the resulting
+#                         digest under additional aliases (see release.yml)
+#   pull_request        → build but do NOT push (used as a CI smoke build to
+#                         catch Dockerfile regressions before merge)
+#   workflow_dispatch   → manual build, no push (pushes only happen on
+#                         non-PR events — see `push:` in build-push-action)
+#
+# Caching uses the GitHub Actions cache backend (`type=gha`), scoped per
+# image so concurrent matrix jobs do not evict each other's layers.
+#
+# Supply-chain hardening:
+#
+#   sbom: true        → docker/build-push-action embeds a CycloneDX SBOM as
+#                       an OCI attestation alongside the image manifest. This
+#                       lets `cosign verify-attestation` and GitHub's
+#                       dependency graph attribute vulns back to source.
+#   provenance: mode=max → SLSA v1 provenance attestation with builder + git
+#                          metadata. Required for SLSA L2 claims.
+#
+# These attestations are stored under the image's referrers (manifest list)
+# and require no separate artifact upload.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Build and Push Images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Per-ref grouping: a new push to main cancels the in-flight main build,
+  # but a tag push (refs/tags/v…) lives in its own group and is never
+  # cancelled by a subsequent main push.
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Hosting registry. GHCR is used because it inherits repo visibility and
+  # auth from the GITHUB_TOKEN — no separate registry credentials needed.
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build ${{ matrix.image.name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # `packages: write` is required to push to GHCR. The default GITHUB_TOKEN
+      # has this scope when the workflow declares it explicitly.
+      packages: write
+      # `attestations: write` + `id-token: write` are required by the
+      # build-push-action to publish SLSA provenance attestations.
+      attestations: write
+      id-token: write
+    strategy:
+      # We want each image's build failure to surface independently so the
+      # team can fix one Dockerfile without retrying the others.
+      fail-fast: false
+      matrix:
+        image:
+          - name: churn-api
+            dockerfile: project/Dockerfile.api
+            # context: repo root, because Dockerfile.api needs to COPY shared
+            # files (pyproject.toml, uv.lock, schemas/) that live outside
+            # project/.
+            context: .
+          - name: churn-mlflow
+            dockerfile: project/Dockerfile.mlflow
+            # MLflow image only needs project/ — but using repo root context
+            # keeps caching symmetric with the api image.
+            context: .
+          - name: churn-monitor
+            dockerfile: project/monitoring/Dockerfile.monitor
+            context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        # Buildx is required for: multi-platform builds, GHA cache backend,
+        # SBOM/provenance attestation generation. The default Docker engine
+        # cannot produce attestations.
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute lowercase image name
+        id: img
+        # GHCR rejects uppercase characters in image references but
+        # github.repository_owner preserves the user/org casing. We lowercase
+        # it here once so the rest of the job can reference a normalized ref.
+        run: |
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "ref=${{ env.REGISTRY }}/${owner_lc}/${{ matrix.image.name }}" >>"$GITHUB_OUTPUT"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.img.outputs.ref }}
+          # Tag rules, in priority order:
+          #   - branch name           → `main`, feature branches, etc.
+          #   - PR ref                → `pr-123` (only when push=false, so
+          #                              effectively a label, never published)
+          #   - sha-<short>           → immutable per-commit pointer; this is
+          #                              the tag release.yml later promotes
+          #   - latest on main        → human-friendly rolling pointer
+          #   - semver                → published on v*.*.* tag pushes
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Log in to GHCR
+        # Skip on PRs from forks — those don't have write access to GHCR and
+        # the login would fail. The build step below also disables `push` on
+        # PRs, so this skip is the right one.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          # Push only on non-PR events. PR builds still exercise the build to
+          # catch Dockerfile breakage, but never publish — preventing fork PRs
+          # from polluting the registry with junk tags.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GHA cache: pulls prior layers from the GitHub-hosted blob store
+          # and writes the new layer set back. `mode=max` exports every
+          # intermediate stage's layers, not just the final image — much
+          # better cache hit rate at the cost of larger cache size.
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+          # ── Supply-chain hardening (see header comment) ───────────────────
+          sbom: true
+          provenance: mode=max

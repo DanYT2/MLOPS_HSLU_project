@@ -30,13 +30,18 @@ import numpy as np
 import pandas as pd
 import psycopg
 import requests
-from evidently import ColumnMapping
-from evidently.metrics import (
+# Evidently 0.7.x split the public surface into a `legacy` submodule. The
+# names we use (ColumnMapping, the metric classes, Report) all live under
+# `evidently.legacy.*` and were re-exported from the top-level package in
+# 0.6.x. Importing from the legacy paths is the stable choice until the
+# rewritten 1.x API is adopted project-wide.
+from evidently.legacy.metrics import (
     ColumnDriftMetric,
     DatasetDriftMetric,
     DatasetMissingValuesMetric,
 )
-from evidently.report import Report
+from evidently.legacy.pipeline.column_mapping import ColumnMapping
+from evidently.legacy.report import Report
 from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
 from sklearn.model_selection import train_test_split
 

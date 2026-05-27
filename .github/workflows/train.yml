@@ -1,0 +1,148 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Train Model — manual, full end-to-end training run on a clean runner
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# This workflow is intentionally `workflow_dispatch` only — training takes
+# tens of minutes, costs CI minutes, and produces non-deterministic outputs
+# (Optuna is seeded but the underlying boosters are not), so we don't want
+# it firing on every push.
+#
+# What it does, end-to-end:
+#
+#   1. Provision a runner with Python 3.13 and the project's deps via uv.
+#   2. Provision the dataset — either downloaded from a URL passed at
+#      dispatch time (`dataset_url` input) or from the TEST_DATASET_URL
+#      repository secret. Both train.csv and test.csv must end up under
+#      project/dataset/ before train.py runs.
+#   3. Start a local MLflow server on 127.0.0.1:5001 with SQLite backing
+#      store and a workspace-local artifact root. Wait up to ~60s for the
+#      /health endpoint to respond.
+#   4. Run project/train.py — feature engineering, Optuna HPO, 5-fold CV
+#      ensemble, model registration as `CustomerChurnEnsemble`.
+#   5. Upload the training artifacts (submission.csv, optuna_studies.db,
+#      mlflow.db) AND the full mlruns/ directory so someone can replay the
+#      registry locally without re-running training.
+#
+# Why run MLflow inside the same job rather than as a service container?
+# Because we want the same workspace volume mounted for both the server
+# (writing artifacts) and train.py (reading them). Service containers
+# don't share the workspace.
+#
+# Note: train.py currently hardcodes the tracking URI in code. Until that's
+# parameterised, this workflow's `MLFLOW_TRACKING_URI` env var is informative
+# rather than effective.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Train Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      experiment_name:
+        description: "MLflow experiment name"
+        required: false
+        default: "ci-training"
+      dataset_url:
+        description: "Optional URL to download train.csv (and test.csv via TEST_DATASET_URL secret)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    name: Train churn ensemble
+    runs-on: ubuntu-latest
+    # 90 minutes is generous — a typical run is ~25 min. The buffer protects
+    # against Optuna stalling on a slow trial; if the cap is hit, fail
+    # loudly rather than racking up runner time.
+    timeout-minutes: 90
+    env:
+      MLFLOW_TRACKING_URI: http://127.0.0.1:5001
+      MLFLOW_EXPERIMENT_NAME: ${{ inputs.experiment_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        # We do not install --group dev here — training does not need pytest
+        # and skipping it shaves a few seconds off the install.
+        run: uv sync --frozen
+
+      - name: Provision dataset
+        env:
+          DATASET_URL: ${{ inputs.dataset_url }}
+          TEST_DATASET_URL: ${{ secrets.TEST_DATASET_URL }}
+        # Either both URLs are provided (dispatch input + secret) or both
+        # CSVs are expected to ship in a fixture branch. We fail fast and
+        # clearly if neither is true.
+        run: |
+          mkdir -p project/dataset
+          if [ -n "$DATASET_URL" ]; then
+            echo "Downloading train.csv from input URL"
+            curl -fsSL "$DATASET_URL" -o project/dataset/train.csv
+          fi
+          if [ -n "$TEST_DATASET_URL" ]; then
+            echo "Downloading test.csv from secret URL"
+            curl -fsSL "$TEST_DATASET_URL" -o project/dataset/test.csv
+          fi
+          if [ ! -f project/dataset/train.csv ] || [ ! -f project/dataset/test.csv ]; then
+            echo "::error::project/dataset/train.csv and test.csv are required."
+            echo "Either pass dataset_url and set TEST_DATASET_URL secret, or commit a fixture."
+            exit 1
+          fi
+
+      - name: Start MLflow server
+        # Backgrounded with `&` so the step doesn't block on the server.
+        # The for-loop polls /health for up to 60s; on success we exit 0,
+        # otherwise we emit a workflow-error annotation and exit 1 so the
+        # job fails with an obvious reason rather than later in train.py.
+        run: |
+          mkdir -p mlruns
+          uv run mlflow server \
+            --host 127.0.0.1 \
+            --port 5001 \
+            --backend-store-uri sqlite:///mlflow.db \
+            --default-artifact-root "$(pwd)/mlruns" \
+            --serve-artifacts &
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:5001/health >/dev/null; then
+              echo "MLflow is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::MLflow did not become ready"; exit 1
+
+      - name: Run training
+        run: uv run python project/train.py
+
+      - name: Upload submission and Optuna studies
+        # `if: always()` so partial outputs from a failed training run are
+        # still recoverable for debugging.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-artifacts
+          path: |
+            project/submission.csv
+            project/optuna_studies.db
+            mlflow.db
+          if-no-files-found: warn
+
+      - name: Upload mlruns directory
+        # Uploaded separately because it's typically the largest artifact
+        # and we want it independently downloadable.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlruns
+          path: mlruns
+          if-no-files-found: warn

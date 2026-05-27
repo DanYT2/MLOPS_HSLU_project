@@ -1,0 +1,153 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Release — tag-driven GitHub release + image promotion + SBOM publication
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Fires when a semver tag matching `v*.*.*` is pushed (e.g. `v1.4.2`). Three
+# stages run in dependency order:
+#
+#   1. github-release   ← Generates release notes from PR titles since the
+#                          previous tag and creates a draft GitHub Release.
+#                          Also generates and attaches a CycloneDX SBOM of
+#                          the Python dependency graph (sourced from uv.lock)
+#                          so downstream consumers can audit dependencies
+#                          without rebuilding the project.
+#
+#   2. promote-images   ← Each per-service image was already built and
+#                          pushed by docker.yml (which also fires on tag
+#                          pushes) under the `sha-<short>` tag. This job uses
+#                          `docker buildx imagetools create` to re-tag that
+#                          same manifest under `:X.Y.Z`, `:X.Y`, `:X`, and
+#                          `:latest`. Using `imagetools` (not `docker tag &&
+#                          push`) preserves the original manifest digest, so
+#                          SBOM/provenance attestations remain valid under
+#                          the new tags — they reference the digest, not the
+#                          tag.
+#
+# Why decouple build from release? Because we always want to know that a
+# tagged commit's images are byte-identical to whatever was already smoke-
+# tested on `main`. Re-building at release time would risk picking up new
+# base-image SHAs or registry index changes.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write   # required to create the GitHub Release + upload assets
+  packages: write   # required to push promoted image tags to GHCR
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # GitHub Release — notes + SBOM
+  # ───────────────────────────────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 pulls the full commit history. softprops/action-gh-release
+          # needs at least the previous tag's commit to compute "what changed
+          # since last release" — a shallow clone would silently produce empty
+          # release notes.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      # ── SBOM (CycloneDX) ───────────────────────────────────────────────────
+      # `uv export` collapses the lockfile into a flat requirements.txt
+      # (no hashes, no dev deps — the SBOM should reflect what runs in
+      # production). cyclonedx-py then walks those pinned versions and emits
+      # a CycloneDX v1.5 JSON document that downstream consumers can ingest
+      # with Dependency-Track, Snyk, etc.
+      # ──────────────────────────────────────────────────────────────────────
+      - name: Export locked production requirements
+        run: uv export --frozen --no-hashes --no-dev -o requirements.txt
+
+      - name: Generate Python SBOM (CycloneDX)
+        run: |
+          uvx --from cyclonedx-bom cyclonedx-py requirements requirements.txt \
+            --output-format JSON \
+            --output-file sbom-python.cdx.json
+
+      - name: Generate release notes and publish
+        uses: softprops/action-gh-release@v2
+        with:
+          # generate_release_notes uses GitHub's API to build the changelog
+          # from PR titles and labels since the previous tag — see
+          # .github/release.yml for category mapping if that file exists.
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          # Attach the SBOM as a release asset. Downstream auditors can
+          # diff this between releases to see exactly what dep changed.
+          files: |
+            sbom-python.cdx.json
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Image promotion — re-tag the existing digest under semver aliases
+  # ───────────────────────────────────────────────────────────────────────────
+  promote-images:
+    name: Promote ${{ matrix.image }} to semver tags
+    runs-on: ubuntu-latest
+    # Strictly speaking we don't *depend* on github-release succeeding to
+    # promote images, but ordering them sequentially gives a cleaner UX:
+    # the GitHub Release lands first, then the images appear under their
+    # semver tags. If the release step fails the promotion is skipped so
+    # we don't end up with semver-tagged images and no release notes.
+    needs: github-release
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [churn-api, churn-mlflow, churn-monitor]
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute references
+        id: refs
+        # The `sha-<short>` tag was produced by docker.yml when this same tag
+        # push fired (both workflows are triggered by the tag). We derive the
+        # major/minor variants from the tag name so they can be applied as
+        # additional aliases over the existing manifest.
+        run: |
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          tag="${GITHUB_REF#refs/tags/}"          # e.g. v1.2.3
+          version="${tag#v}"                       # e.g. 1.2.3
+          major="${version%%.*}"
+          minor="${version%.*}"
+          base="ghcr.io/${owner_lc}/${{ matrix.image }}"
+          # 7-char short SHA matches docker/metadata-action's default truncation.
+          echo "src=${base}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >>"$GITHUB_OUTPUT"
+          echo "v_full=${base}:${version}" >>"$GITHUB_OUTPUT"
+          echo "v_minor=${base}:${minor}" >>"$GITHUB_OUTPUT"
+          echo "v_major=${base}:${major}" >>"$GITHUB_OUTPUT"
+          echo "v_latest=${base}:latest" >>"$GITHUB_OUTPUT"
+
+      - name: Re-tag image to release semver tags
+        # `buildx imagetools create --tag <new> <existing>` does a server-side
+        # manifest copy: no image bytes are downloaded or rebuilt, and the
+        # underlying digest (the thing SBOM/provenance attestations bind to)
+        # is preserved. The promoted tags are exactly the same image as the
+        # `sha-<short>` tag, just under more memorable names.
+        run: |
+          set -euo pipefail
+          src="${{ steps.refs.outputs.src }}"
+          docker buildx imagetools create \
+            --tag "${{ steps.refs.outputs.v_full }}" \
+            --tag "${{ steps.refs.outputs.v_minor }}" \
+            --tag "${{ steps.refs.outputs.v_major }}" \
+            --tag "${{ steps.refs.outputs.v_latest }}" \
+            "$src"
