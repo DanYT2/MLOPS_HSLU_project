@@ -97,7 +97,7 @@ jobs:
         # Buildx is required for: multi-platform builds, GHA cache backend,
         # SBOM/provenance attestation generation. The default Docker engine
         # cannot produce attestations.
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Compute lowercase image name
         id: img
