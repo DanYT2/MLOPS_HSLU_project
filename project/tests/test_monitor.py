@@ -7,16 +7,14 @@ the FastAPI service, and CSVs. Instead we exercise the deterministic helpers:
 from __future__ import annotations
 
 import pandas as pd
-import pytest
+import pytest  # noqa: F401  # used as pytest.approx in test cases below
 
-# monitoring.monitor pulls in evidently + psycopg (libpq) at import time. Both
-# are heavy/optional in CI environments and Evidently's public API has changed
-# names across versions, so we skip the whole module if any of those imports
-# fail rather than failing collection.
-try:
-    from monitoring.monitor import DriftInjector, _to_features
-except ImportError as exc:
-    pytest.skip(f"monitoring.monitor unavailable: {exc}", allow_module_level=True)
+# monitoring.monitor must import cleanly under the locked dependency set.
+# Previously this block swallowed ImportError and skipped the whole file,
+# which masked a real Evidently API regression and let coverage tank
+# silently. Fail loudly instead — any future ImportError here is a real
+# bug that should break CI, not a reason to disable the suite.
+from monitoring.monitor import DriftInjector, _to_features  # noqa: E402
 
 
 def _build_injector(mode: str, **overrides) -> DriftInjector:
