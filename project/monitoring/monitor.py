@@ -104,8 +104,9 @@ DRIFT_RANDOM_STATE = int(os.environ.get("DRIFT_RANDOM_STATE", "7"))
 
 # psycopg accepts connection settings as keyword arguments. Keeping the DSN as a
 # dictionary makes it easy to reuse for the readiness probe and per-batch insert.
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "postgres")
 PG_DSN = {
-    "host": os.environ.get("POSTGRES_HOST", "postgres"),
+    "host": POSTGRES_HOST,
     "port": int(os.environ.get("POSTGRES_PORT", "5432")),
     "user": os.environ.get("POSTGRES_USER", "monitor"),
     "password": os.environ.get("POSTGRES_PASSWORD", "monitor"),
@@ -546,7 +547,7 @@ def run() -> None:
     log.info(
         "monitor starting; api=%s pg=%s batch_size=%d interval=%ds",
         API_URL,
-        PG_DSN["host"],
+        POSTGRES_HOST,
         BATCH_SIZE,
         INTERVAL_SECONDS,
     )
