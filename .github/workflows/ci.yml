@@ -1,0 +1,146 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — Lint and tests
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# This is the canonical "is the codebase healthy?" workflow. It runs on every
+# push to every branch and on every PR targeting main. Two stages:
+#
+#   1. lint  — Ruff (check + format check). Cheap, runs first; if it fails we
+#              still want to know about test results, so the test job does not
+#              depend on lint passing (see `needs:` below).
+#   2. test  — pytest with coverage on Python 3.13. The `--cov-fail-under=60`
+#              gate is the hard threshold: if line coverage drops below 60%
+#              the job fails. Coverage XML is uploaded as an artifact so it
+#              can be inspected per-run or fed to an external coverage UI.
+#
+# Why `uv`? `uv sync --frozen` is dramatically faster than `pip install` for
+# this lock-file-driven project, and `astral-sh/setup-uv@v6` caches the uv
+# resolver state keyed on `uv.lock` — a hot run installs deps in seconds.
+#
+# Concurrency: a new push to the same ref cancels in-flight runs. This is the
+# right default for CI (you don't care about the previous commit's lint
+# result once a newer commit lands), but is intentionally NOT enabled on
+# release.yml or train.yml where every run produces durable artifacts.
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only token is sufficient: this workflow does not push images, comment
+# on PRs, or create releases.
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Lint — Ruff
+  # ───────────────────────────────────────────────────────────────────────────
+  # `ruff check` is the hard gate (style + bug-prone patterns). `ruff format
+  # --check` is run with continue-on-error: code that isn't auto-formatted
+  # should be visible in the run summary but not block merges, because Ruff's
+  # formatter occasionally changes between minor versions and we don't want
+  # those bumps to break unrelated PRs. Format violations get cleaned up
+  # opportunistically by the auto-formatting commits Dependabot/maintainers
+  # create.
+  # ───────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          # Cache is invalidated whenever uv.lock changes. This is the only
+          # file that affects resolved dep versions, so it's the right key.
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        # `uv python install` downloads a standalone CPython matching the
+        # repo's `.python-version`. We pin to 3.13 here explicitly so a
+        # future bump in `.python-version` cannot silently change CI.
+        run: uv python install 3.13
+
+      - name: Install dependencies (incl. dev group)
+        # --frozen: refuse to update uv.lock, fail if the lockfile is stale.
+        # --group dev: pulls in pytest/pytest-cov/httpx/pip-audit which live
+        #              under [dependency-groups.dev] in pyproject.toml.
+        run: uv sync --frozen --group dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+        # See header comment — formatter drift should not block merges.
+        continue-on-error: true
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Tests — pytest + coverage
+  # ───────────────────────────────────────────────────────────────────────────
+  # `needs: lint` is set so that an obvious style error fails fast and saves
+  # CI minutes. We accept the latency cost (≈10–30s extra wall clock) in
+  # exchange for not running the full test matrix on a known-broken commit.
+  #
+  # `PYTHONPATH=project` is required because the codebase imports schemas via
+  # `from schemas.schemas import ...`. The same path is also configured in
+  # pyproject.toml's [tool.pytest.ini_options] and in conftest.py, but we
+  # set it explicitly here as belt-and-braces.
+  # ───────────────────────────────────────────────────────────────────────────
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      # Don't abort the matrix when one Python version fails — we want to see
+      # all version results to triage. Currently the matrix has only 3.13;
+      # the structure is kept so adding 3.14 in the future is a one-line edit.
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies (incl. dev group)
+        run: uv sync --frozen --group dev
+
+      - name: Run pytest with coverage
+        env:
+          # See header comment on import layout.
+          PYTHONPATH: project
+        run: |
+          uv run pytest project/tests \
+            --cov=project \
+            --cov-report=xml \
+            --cov-report=term \
+            --cov-fail-under=60
+
+      - name: Upload coverage report
+        # `if: always()` ensures we still publish coverage on test failure
+        # — the partial report is often useful for diagnosing where the
+        # failing tests were concentrated.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: warn
