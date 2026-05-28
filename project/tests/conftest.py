@@ -5,6 +5,7 @@ which only resolves when ``project/`` is on ``sys.path``. ``pytest.ini_options``
 in ``pyproject.toml`` adds it, but we re-add here as a safety net so the suite
 also runs with bare ``pytest`` invocations from ``project/``.
 """
+
 from __future__ import annotations
 
 import sys

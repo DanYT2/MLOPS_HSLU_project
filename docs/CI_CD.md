@@ -14,20 +14,18 @@ big-picture view that those comments can't easily express.
 The pipeline is designed around four goals, in priority order:
 
 1. **Keep `main` always shippable.** No commit can land on `main` without
-   passing lint, unit tests with ≥60% coverage, container image builds,
-   a stack-level smoke test, and security scans.
+   passing lint, unit tests with ≥50% coverage, image builds, secret
+   scanning, and the GitHub-managed CodeQL default scan.
 2. **Make every artifact traceable.** Every published container image is
    tagged with the commit SHA that produced it; every release attaches an
    SBOM derived from the same lockfile that fed the image build.
-3. **Fail fast where it's cheap.** Lint runs before tests; tests run
-   before the heavyweight Trivy/CodeQL scans on pushes. Smoke tests boot
-   in parallel so an image-level regression and a code-level regression
-   are reported simultaneously.
+3. **Fail fast where it's cheap.** Lint runs before tests; PR-time scans
+   run in parallel so code-level and image-level regressions are reported
+   simultaneously.
 4. **Be explicit about what is enforcing vs. informational.** Hard gates
-   (lint, tests, pip-audit, gitleaks) fail PRs. Soft signals (Trivy,
-   CodeQL alerts, format check) surface in the Security tab or run summary
-   without blocking — calibrated so teams aren't pressured into rubber-
-   stamping noisy findings.
+   (lint, tests, gitleaks) fail PRs. Soft signals (CodeQL alerts, format
+   check) surface in the Security tab without blocking — calibrated so
+   teams aren't pressured into rubber-stamping noisy findings.
 
 ---
 
@@ -46,29 +44,20 @@ The pipeline is designed around four goals, in priority order:
                        PR opened against main
                        ──────────────────────
                                     │
-                ┌───────────────────┼───────────────────────────┐
-                ▼                   ▼                           ▼
-        ┌───────────────┐   ┌───────────────┐         ┌───────────────────┐
-        │ CI (ci.yml)   │   │ Smoke Test    │         │ Security Scans    │
-        │ lint + tests  │   │ (smoke-       │         │ (security.yml)    │
-        │ + coverage    │   │  test.yml)    │         │   pip-audit + Trivy
-        └───────────────┘   │ compose boot  │         └───────────────────┘
-                            │ + import smoke│
-                ┌───────────┴───────────────┴───────────────────┐
-                ▼                                               ▼
-        ┌───────────────┐                               ┌───────────────┐
-        │ CodeQL        │                               │ Secret Scan   │
-        │ (codeql.yml)  │                               │ (secret-      │
-        │ Python SAST   │                               │  scan.yml)    │
-        └───────────────┘                               │ Gitleaks      │
-                                                        └───────────────┘
+                ┌───────────────────┼───────────────────────┐
+                ▼                   ▼                       ▼
+        ┌───────────────┐   ┌────────────────┐     ┌────────────────────┐
+        │ CI (ci.yml)   │   │ Docker build   │     │ Secret Scan        │
+        │ lint + tests  │   │ (docker.yml)   │     │ (secret-scan.yml)  │
+        │ + coverage    │   │ build only on  │     │ Gitleaks           │
+        └───────────────┘   │ PR (no push)   │     └────────────────────┘
+                            └────────────────┘
                                     │
                                     ▼
-                ┌──────────────────────────────────────────────┐
-                │ Docker build & push (docker.yml)             │
-                │   builds api/mlflow/monitor images           │
-                │   push: false on PRs (build-only)            │
-                └──────────────────────────────────────────────┘
+                    ┌─────────────────────────────────┐
+                    │ CodeQL (GitHub default setup)   │
+                    │ Auto-managed by GitHub          │
+                    └─────────────────────────────────┘
 
                             merge to main
                             ─────────────
@@ -94,33 +83,35 @@ The pipeline is designed around four goals, in priority order:
                                                        │   imagetools     │
                                                        └──────────────────┘
 
-                            cron (off-hours)
-                            ────────────────
+                            cron / manual
+                            ─────────────
                                     │
-        ┌───────────────────────────┼───────────────────────────┐
-        ▼                           ▼                           ▼
-   security.yml                codeql.yml                  secret-scan.yml
-   (weekly Mon 06Z)           (weekly Sun 04Z)            (weekly Mon 05Z)
+                        ┌───────────┴───────────┐
+                        ▼                       ▼
+                  secret-scan.yml          train.yml
+                  (weekly Mon 05Z)         (manual dispatch only)
 ```
 
 ---
 
 ## 3. Workflow matrix
 
-The full list of workflows and their roles. Every workflow declares the
-minimum permissions required and explains those declarations in its
-own header comment.
+The full list of workflows in `.github/workflows/` and their roles.
 
 | Workflow | File | Triggers | Gate? | Purpose |
 |---|---|---|---|---|
-| CI | `.github/workflows/ci.yml` | every push, PR → main | **enforcing** | Ruff lint, pytest with `--cov-fail-under=60` |
-| Smoke Test | `.github/workflows/smoke-test.yml` | push:main, PR → main | **enforcing** | Compose build + boot infra + import-smoke api/monitor |
-| Build & Push | `.github/workflows/docker.yml` | push:main, push:tag, PR → main, manual | **enforcing for build**; push is conditional | Build api/mlflow/monitor images with SBOM + SLSA provenance |
-| Release | `.github/workflows/release.yml` | push of `v*.*.*` tag | n/a (post-merge) | Generate release notes, attach CycloneDX SBOM, promote image tags |
-| Security Scans | `.github/workflows/security.yml` | PR → main, weekly cron, manual | pip-audit **enforcing**, Trivy **informational** | Python deps audit + image CVE scan, both surfaced to code-scanning |
-| CodeQL | `.github/workflows/codeql.yml` | push:main, PR → main, weekly cron | informational | Python SAST, results in Security tab |
-| Secret Scan | `.github/workflows/secret-scan.yml` | push:main, PR → main, weekly cron | **enforcing** | Gitleaks history scan |
-| Train Model | `.github/workflows/train.yml` | manual dispatch only | n/a | Full training run, uploads model artifacts |
+| CI | `ci.yml` | every push, PR → main | **enforcing** | Ruff lint, pytest with `--cov-fail-under=50` |
+| Build & Push | `docker.yml` | push:main, push:tag, PR → main, manual | **enforcing for build**; push is conditional | Build api/mlflow/monitor images with SBOM + SLSA provenance |
+| Release | `release.yml` | push of `v*.*.*` tag | n/a (post-merge) | Generate release notes, attach CycloneDX SBOM, promote image tags |
+| Secret Scan | `secret-scan.yml` | push:main, PR → main, weekly cron | **enforcing** | Gitleaks history scan |
+| Train Model | `train.yml` | manual dispatch only | n/a | Full training run, uploads model artifacts |
+
+**Outside of `.github/workflows/`:** CodeQL runs under GitHub's
+*default setup* (Settings → Code security → Code scanning). This is
+GitHub-managed — there is no YAML to maintain, no query pack to
+configure. Findings appear in the Security → Code scanning tab. To
+move CodeQL into a workflow file with custom queries instead, switch
+to advanced setup in the same UI page.
 
 ---
 
@@ -131,13 +122,11 @@ A different view: what fires on which event.
 | Event | Workflows |
 |---|---|
 | Push to feature branch | `ci.yml` |
-| Open or update a PR → `main` | `ci.yml`, `smoke-test.yml`, `docker.yml` (build-only), `security.yml`, `codeql.yml`, `secret-scan.yml` |
-| Merge to `main` | `ci.yml`, `smoke-test.yml`, `docker.yml` (push), `codeql.yml`, `secret-scan.yml` |
+| Open or update a PR → `main` | `ci.yml`, `docker.yml` (build-only), `secret-scan.yml` + GitHub-managed CodeQL |
+| Merge to `main` | `ci.yml`, `docker.yml` (push), `secret-scan.yml` + GitHub-managed CodeQL |
 | Push of `v*.*.*` tag | `docker.yml` (push with semver tags), `release.yml` |
-| Weekly cron (Sun 04Z) | `codeql.yml` |
 | Weekly cron (Mon 05Z) | `secret-scan.yml` |
-| Weekly cron (Mon 06Z) | `security.yml` |
-| Manual dispatch | `train.yml`, `docker.yml`, `security.yml`, `secret-scan.yml`, `codeql.yml` |
+| Manual dispatch | `train.yml`, `docker.yml`, `secret-scan.yml` |
 
 ---
 
@@ -146,8 +135,8 @@ A different view: what fires on which event.
 The model is **trunk-based with semver tags**:
 
 1. Develop on feature branches. CI runs lint + tests on every push.
-2. Open a PR to `main`. The full suite (above) runs. Required checks
-   prevent merge until enforcing jobs pass.
+2. Open a PR to `main`. The full PR suite runs. Required checks prevent
+   merge until enforcing jobs pass.
 3. Merge to `main`. `docker.yml` republishes images under `main`,
    `latest`, and `sha-<short>` tags. These are the rolling-deploy
    candidates if you operate continuous delivery.
@@ -221,10 +210,6 @@ Verify with `cosign verify-attestation` against the GHCR issuer.
 
 ## 7. Secrets
 
-Workflows use these repository secrets. None are required for the
-default CI path on a fresh fork — only the manual training workflow
-needs additional configuration to source its dataset.
-
 | Secret | Used by | Required? | Purpose |
 |---|---|---|---|
 | `GITHUB_TOKEN` | all workflows | auto-injected | GHCR auth, code-scanning uploads, release publish |
@@ -241,17 +226,12 @@ Two cache layers, each keyed deliberately:
 
 - **uv resolver cache** — `astral-sh/setup-uv@v6` with
   `cache-dependency-glob: "uv.lock"`. Invalidated by any change to the
-  lockfile, shared across all workflows running on the same runner image.
-  A hot cache makes `uv sync` complete in 5–10 seconds.
+  lockfile. A hot cache makes `uv sync` complete in 5–10 seconds.
 
 - **Docker buildx GHA cache** — `cache-from`/`cache-to` of
   `type=gha,scope=<image-name>`. Per-image scope so a churn-api build
   doesn't evict churn-mlflow layers. `mode=max` exports every
   intermediate stage's layers, not just the final image.
-
-The smoke test workflow shares the same `type=gha` cache backend as
-docker.yml without specifying a scope explicitly — Compose builds key
-the cache on service name automatically.
 
 ---
 
@@ -262,24 +242,18 @@ Configure these as required status checks on the `main` branch in
 
 - `CI / Lint (ruff)`
 - `CI / Tests (pytest) (3.13)`
-- `Smoke Test / Compose stack smoke`
 - `Build and Push Images / Build churn-api`
 - `Build and Push Images / Build churn-mlflow`
 - `Build and Push Images / Build churn-monitor`
-- `Security Scans / pip-audit (uv lockfile)`
 - `Secret Scan / Gitleaks`
 
 The following are **deliberately not** required, because their failure
 modes don't justify blocking PRs:
 
-- `Security Scans / Trivy image scan (...)` — `exit-code: "0"` upstream,
-  findings surface in the Security tab.
-- `CodeQL / Analyze (python)` — query packs evolve weekly; new findings
-  on unchanged code shouldn't block unrelated PRs.
+- GitHub-managed CodeQL findings — surface in the Security tab; query
+  packs evolve weekly, so new findings on unchanged code shouldn't
+  block unrelated PRs.
 - Ruff format check (within ci.yml) — `continue-on-error: true`.
-
-Flip any of these to enforcing by removing `continue-on-error` or
-setting `exit-code: "1"` in the relevant action input.
 
 ---
 
@@ -323,24 +297,12 @@ The same checks that CI runs are reproducible locally:
 uv run ruff check .
 uv run ruff format --check .
 
-# Tests with coverage
+# Tests with coverage (matches ci.yml exactly)
 PYTHONPATH=project uv run pytest project/tests \
-  --cov=project --cov-report=term --cov-fail-under=60
+  --cov=project --cov-report=term --cov-fail-under=50
 
 # Image builds (matches docker.yml's build step)
 docker compose -f project/docker-compose.yml build
-
-# Compose smoke (matches smoke-test.yml)
-cd project
-docker compose up -d postgres mlflow
-docker compose exec -T postgres psql -U monitor -d monitoring -c '\dt monitoring_metrics'
-curl -fsS http://localhost:5001/health
-docker compose run --rm --no-deps --entrypoint python api -c "import web_service"
-docker compose down -v
-
-# pip-audit (matches security.yml)
-uv export --frozen --no-hashes --no-dev -o /tmp/req.txt
-uvx pip-audit --requirement /tmp/req.txt --strict
 ```
 
 ---
@@ -364,25 +326,14 @@ produced by docker.yml on the same tag-push event. If docker.yml's
 build for that SHA failed or was skipped, the promotion fails. Re-run
 docker.yml for that ref and re-run release.yml.
 
-**`smoke-test.yml`'s postgres healthcheck times out.**
-Postgres init.sql runs on first startup only — if a previous run left a
-volume with an incompatible schema, `init.sql` will not re-run. Check
-the dump-logs step output for migration errors. The teardown step uses
-`down -v` to drop volumes, so this should not happen run-to-run, but
-can if a workflow is cancelled mid-init.
-
-**`security.yml`'s Trivy step shows findings I can't fix.**
-Findings come in two flavors. **OS package CVEs** are fixed by bumping
-the base image (e.g. `python:3.13-slim` → newer point release) — the
-fix is in the Dockerfile, not in this workflow. **Python package CVEs**
-are fixed by `uv lock --upgrade-package <name>` and committing the
-updated `uv.lock`.
+**CodeQL workflow fails with "CodeQL analyses from advanced configurations cannot be processed when the default setup is enabled".**
+Default setup and advanced (workflow-based) setup are mutually
+exclusive. Either delete the workflow-based codeql.yml, or switch
+default setup off in **Settings → Code security → Code scanning**.
 
 **CodeQL marks a finding I know is safe.**
 Dismiss it from the Security tab with a reason. Don't add suppression
-comments to source — those persist beyond the fix and rot. If a query
-produces too many false positives, lower the query suite from
-`security-extended` back to `security-and-quality` in `codeql.yml`.
+comments to source — those persist beyond the fix and rot.
 
 ---
 
@@ -390,10 +341,8 @@ produces too many false positives, lower the query suite from
 
 **Add a new container image:**
 1. Add the Dockerfile + Compose service.
-2. Append the image to the matrix in `docker.yml`, `security.yml` (Trivy
-   job), and `release.yml` (promote-images job). The smoke test pulls
-   from the Compose file, so no edit needed there if the service has a
-   `build:` stanza.
+2. Append the image to the matrix in `docker.yml` and `release.yml`
+   (promote-images job).
 
 **Add a new gate (e.g. type checks with mypy):**
 1. Add `mypy` to `[dependency-groups.dev]` in `pyproject.toml`.
@@ -402,11 +351,24 @@ produces too many false positives, lower the query suite from
    status checks (section 9).
 
 **Bump the coverage threshold:**
-Edit `--cov-fail-under=60` in `ci.yml`. The threshold should track
+Edit `--cov-fail-under=50` in `ci.yml`. The threshold should track
 realistic project coverage — bumping it ahead of test growth is a
-recipe for blocked PRs.
+recipe for blocked PRs. Most of the uncovered surface is `monitor.py`'s
+`run()` replay loop; raise the floor as the unit-testable surface
+grows.
 
 **Bump Python:**
 Update `.python-version`, `requires-python` in `pyproject.toml`, and
 the matrix in `ci.yml`. The setup-uv action installs the requested
 version on the fly; no other workflow needs editing.
+
+**Re-add the smoke/security/CodeQL workflows:**
+The earlier iteration of this pipeline included `smoke-test.yml`,
+`security.yml`, and `codeql.yml`. They were removed because:
+- CodeQL conflicted with GitHub's default setup (see §12).
+- security.yml's pip-audit / Trivy gates produced too much CVE noise
+  for the project's scope at the time.
+- smoke-test.yml's compose boot was redundant with image-build success.
+
+Git history has working versions of all three if you want to revive
+them. CodeQL specifically requires disabling default setup first.

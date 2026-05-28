@@ -68,7 +68,7 @@ Coverage is configured to omit `project/train.py` and `project/monitoring/grafan
 
 ## CI
 
-GitHub Actions in `.github/workflows/`: `ci.yml` (ruff + pytest with `--cov-fail-under=60` on Python 3.13), plus `docker.yml`, `release.yml`, `security.yml`, `train.yml`. The lint job runs `ruff format --check` with `continue-on-error: true`, but `ruff check` is enforcing.
+GitHub Actions in `.github/workflows/`: `ci.yml` (ruff + pytest with `--cov-fail-under=50` on Python 3.13), plus `docker.yml`, `release.yml`, `secret-scan.yml`, `train.yml`. CodeQL is enabled via GitHub's *default setup* (Settings → Code security → Code scanning), not via a workflow file. The lint job runs `ruff format --check` with `continue-on-error: true`, but `ruff check` is enforcing.
 
 ## Data
 

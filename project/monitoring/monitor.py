@@ -17,6 +17,7 @@ until every batch from both simulation pools has been consumed. Set
 ``LOOP_FOREVER=1`` to replay the pools repeatedly, or ``RUN_ONCE=1`` to force a
 single pass even if the forever flag is enabled.
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,6 +31,7 @@ import numpy as np
 import pandas as pd
 import psycopg
 import requests
+
 # Evidently 0.7.x split the public surface into a `legacy` submodule. The
 # names we use (ColumnMapping, the metric classes, Report) all live under
 # `evidently.legacy.*` and were re-exported from the top-level package in
@@ -94,14 +96,17 @@ DRIFT_START_BATCH = int(os.environ.get("DRIFT_START_BATCH", "0"))
 DRIFT_RAMP_BATCHES = max(1, int(os.environ.get("DRIFT_RAMP_BATCHES", "5")))
 DRIFT_PERIOD_BATCHES = max(2, int(os.environ.get("DRIFT_PERIOD_BATCHES", "6")))
 DRIFT_NUMERIC_SHIFT_STD = float(os.environ.get("DRIFT_NUMERIC_SHIFT_STD", "1.5"))
-DRIFT_CATEGORICAL_SWAP_PROB = float(os.environ.get("DRIFT_CATEGORICAL_SWAP_PROB", "0.4"))
+DRIFT_CATEGORICAL_SWAP_PROB = float(
+    os.environ.get("DRIFT_CATEGORICAL_SWAP_PROB", "0.4")
+)
 DRIFT_MISSING_RATE = float(os.environ.get("DRIFT_MISSING_RATE", "0.0"))
 DRIFT_RANDOM_STATE = int(os.environ.get("DRIFT_RANDOM_STATE", "7"))
 
 # psycopg accepts connection settings as keyword arguments. Keeping the DSN as a
 # dictionary makes it easy to reuse for the readiness probe and per-batch insert.
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "postgres")
 PG_DSN = {
-    "host": os.environ.get("POSTGRES_HOST", "postgres"),
+    "host": POSTGRES_HOST,
     "port": int(os.environ.get("POSTGRES_PORT", "5432")),
     "user": os.environ.get("POSTGRES_USER", "monitor"),
     "password": os.environ.get("POSTGRES_PASSWORD", "monitor"),
@@ -179,7 +184,7 @@ class Pool:
     ``has_labels`` tells the metric layer whether it can compute supervised
     metrics such as accuracy, ROC AUC, and log loss. The holdout slice from
     train.csv has labels; test.csv usually does not.
-    
+
     A simulation pool - a dataframe sliced into fixed-size batches.
     """
 
@@ -421,8 +426,11 @@ def build_reference(train_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
     column from the live model. The returned simulation pool keeps labels too,
     but it is scored later batch-by-batch to mimic production traffic.
     """
-    log.info("loaded %d train rows; splitting %.0f%% as reference",
-             len(train_df), REFERENCE_FRAC * 100)
+    log.info(
+        "loaded %d train rows; splitting %.0f%% as reference",
+        len(train_df),
+        REFERENCE_FRAC * 100,
+    )
     ref_df, sim_df = train_test_split(
         train_df,
         test_size=1 - REFERENCE_FRAC,
@@ -536,8 +544,13 @@ def compute_metrics(
 # ── Main loop ────────────────────────────────────────────────────
 def run() -> None:
     """Coordinate dependency readiness, data loading, scoring, and persistence."""
-    log.info("monitor starting; api=%s pg=%s batch_size=%d interval=%ds",
-             API_URL, PG_DSN["host"], BATCH_SIZE, INTERVAL_SECONDS)
+    log.info(
+        "monitor starting; api=%s pg=%s batch_size=%d interval=%ds",
+        API_URL,
+        POSTGRES_HOST,
+        BATCH_SIZE,
+        INTERVAL_SECONDS,
+    )
     wait_for_postgres(PG_DSN)
     ensure_schema(PG_DSN)
     wait_for_api(API_URL, API_WAIT_SECONDS)
@@ -573,9 +586,13 @@ def run() -> None:
         log.info(
             "drift injection enabled: mode=%s start=%d ramp=%d period=%d "
             "shift_std=%.2f swap_prob=%.2f missing_rate=%.2f",
-            DRIFT_MODE, DRIFT_START_BATCH, DRIFT_RAMP_BATCHES,
-            DRIFT_PERIOD_BATCHES, DRIFT_NUMERIC_SHIFT_STD,
-            DRIFT_CATEGORICAL_SWAP_PROB, DRIFT_MISSING_RATE,
+            DRIFT_MODE,
+            DRIFT_START_BATCH,
+            DRIFT_RAMP_BATCHES,
+            DRIFT_PERIOD_BATCHES,
+            DRIFT_NUMERIC_SHIFT_STD,
+            DRIFT_CATEGORICAL_SWAP_PROB,
+            DRIFT_MISSING_RATE,
         )
 
     # Counts every batch processed across pools and passes so DRIFT_MODE
@@ -603,8 +620,12 @@ def run() -> None:
                 try:
                     probs = predict(features)
                 except Exception as exc:  # noqa: BLE001
-                    log.error("prediction failed for %s batch %d: %s",
-                              pool.name, batch_id, exc)
+                    log.error(
+                        "prediction failed for %s batch %d: %s",
+                        pool.name,
+                        batch_id,
+                        exc,
+                    )
                     continue
 
                 current = drifted_batch.copy()
@@ -615,7 +636,9 @@ def run() -> None:
                     # Labels come from the *original* batch — drift perturbs
                     # features, but the ground truth doesn't move.
                     current[TARGET_COL] = batch[TARGET_COL].astype(int)
-                    cur_for_eval = current[FEATURE_COLUMNS + [TARGET_COL, PREDICTION_COL]]
+                    cur_for_eval = current[
+                        FEATURE_COLUMNS + [TARGET_COL, PREDICTION_COL]
+                    ]
                     ref_slice = ref_for_eval
                 else:
                     # Reference frame for test pool intentionally drops the target

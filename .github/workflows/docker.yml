@@ -97,7 +97,7 @@ jobs:
         # Buildx is required for: multi-platform builds, GHA cache backend,
         # SBOM/provenance attestation generation. The default Docker engine
         # cannot produce attestations.
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
       - name: Compute lowercase image name
         id: img
@@ -110,7 +110,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@v5
         with:
           images: ${{ steps.img.outputs.ref }}
           # Tag rules, in priority order:
@@ -142,7 +142,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}

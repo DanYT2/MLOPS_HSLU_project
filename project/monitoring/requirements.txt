@@ -1,6 +1,6 @@
-evidently==0.4.40
-psycopg[binary]==3.2.3
-pandas==2.2.3
-numpy==1.26.4
-requests==2.32.3
-scikit-learn==1.5.2
+evidently==0.7.21
+psycopg[binary]==3.3.4
+pandas==2.3.3
+numpy==2.4.6
+requests==2.34.2
+scikit-learn==1.8.0
