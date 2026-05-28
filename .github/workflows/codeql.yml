@@ -67,7 +67,7 @@ jobs:
       # findings in the Security tab).
       # ──────────────────────────────────────────────────────────────────────
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           queries: security-extended
@@ -77,7 +77,7 @@ jobs:
       # — and so adding a compiled language to the matrix later doesn't
       # require restructuring this file.
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
+        uses: github/codeql-action/autobuild@v3
 
       # ── Run the queries and upload SARIF ───────────────────────────────────
       # `category` differentiates this analysis in the code-scanning UI from
@@ -85,6 +85,6 @@ jobs:
       # findings would merge and individual scanner results would be hidden.
       # ──────────────────────────────────────────────────────────────────────
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"

@@ -66,9 +66,28 @@ jobs:
         run: uv export --frozen --no-hashes --no-dev -o requirements.txt
 
       - name: Run pip-audit
+        # `--disable-pip --no-deps` is required because the runner's Python
+        # is the uv-managed standalone CPython, which strips `ensurepip`.
+        # Without --disable-pip, pip-audit's default mode tries to create a
+        # venv per requirement to resolve metadata and crashes with
+        # `ensurepip is disabled`. The requirements file is fully pinned
+        # (uv export --frozen), so --no-deps is safe — every transitive dep
+        # already has an exact version.
+        #
         # `--strict` flips warnings (e.g. yanked packages) into errors. This
         # is the hard gate referenced in CI_CD.md.
-        run: uvx pip-audit --requirement requirements.txt --strict
+        #
+        # `--ignore-vuln PYSEC-2026-161` (starlette <1.0.1 CVE) is suppressed
+        # because mlflow-skinny pins `starlette<1`. Until mlflow drops that
+        # upper bound, we cannot bump starlette to the fixed version without
+        # losing MLflow entirely. Revisit on every mlflow release; remove
+        # this ignore once the upstream constraint relaxes.
+        run: >-
+          uvx pip-audit
+          --requirement requirements.txt
+          --disable-pip --no-deps
+          --ignore-vuln PYSEC-2026-161
+          --strict
 
   # ───────────────────────────────────────────────────────────────────────────
   # Container image scans — Trivy
@@ -98,10 +117,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
       - name: Build image (local, no push)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -118,7 +137,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
 
       - name: Scan with Trivy
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: local/${{ matrix.image }}:scan
           format: sarif
@@ -139,7 +158,7 @@ jobs:
         # `if: always()` so SARIF still uploads when an earlier step
         # produces partial output.
         if: always()
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           # Distinct category per image — GitHub deduplicates findings within

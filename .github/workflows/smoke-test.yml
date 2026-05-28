@@ -63,7 +63,7 @@ jobs:
       - name: Set up Docker Buildx
         # Buildx is needed for `cache-from: type=gha` to work via Compose's
         # bake integration on newer Compose versions.
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
       # ── Build all three images ─────────────────────────────────────────────
       # `docker compose build` reads docker-compose.yml and builds every
