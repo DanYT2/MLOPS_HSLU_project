@@ -137,7 +137,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
 
       - name: Scan with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: local/${{ matrix.image }}:scan
           format: sarif
