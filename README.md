@@ -1,8 +1,32 @@
 # Artificial Intelligence (HSLU)
 
-Coursework and project work for **HSLU Artificial Intelligence**. The main deliverable is a **Customer Churn Prediction** stack under [`project/`](project/): a **LightGBM + XGBoost** ensemble (5-fold stratified cross-validation), **Optuna** hyperparameter optimization, **MLflow** experiment tracking and Model Registry, and a **FastAPI** service for real-time inference on telecom-style tabular data.
+Coursework and project work for **HSLU Artificial Intelligence**. The main deliverable is a **Customer Churn Prediction** stack under [`project/`](project/): a **LightGBM + XGBoost** ensemble (5-fold stratified cross-validation), **Optuna** hyperparameter optimization, **MLflow** experiment tracking and Model Registry, a **FastAPI** service for real-time inference, and an **Evidently + Postgres + Grafana** monitoring loop — all containerized and wired into a multi-stage GitHub Actions pipeline (lint, tests, image builds, SBOM/provenance, secret scanning, tag-driven releases).
 
-The repository root [`main.py`](main.py) is a minimal placeholder. Smaller exercises live under [`lessons/`](lessons/) (for example [`lessons/sw_03/web_service.py`](lessons/sw_03/web_service.py)). [`dashboard.html`](dashboard.html) is a standalone static “MLOps blueprint” page (Tailwind CSS, Chart.js); it is not part of the Python runtime.
+The repository root [`main.py`](main.py) is a minimal placeholder. [`dashboard.html`](dashboard.html) is a standalone static "MLOps blueprint" page (Tailwind CSS, Chart.js); it is not part of the Python runtime.
+
+## MLOps practices at a glance
+
+| Capability | Where it lives |
+|------------|----------------|
+| Experiment tracking | MLflow runs logged from [`project/train.py`](project/train.py); UI on port `5001` |
+| Hyperparameter optimization | Optuna TPE study in `tune_hyperparams()` ([`project/train.py`](project/train.py)); studies persist to `project/optuna_studies.db` |
+| Cross-validated ensembling | 5-fold stratified CV over LightGBM + XGBoost, wrapped as a single MLflow `pyfunc` ([`project/train.py`](project/train.py)) |
+| Model registry + aliasing | `CustomerChurnEnsemble` registered model with `@champion` alias (MLflow Model Registry) |
+| Reproducible environment | [`uv`](https://docs.astral.sh/uv/) + [`pyproject.toml`](pyproject.toml) + frozen [`uv.lock`](uv.lock) |
+| Containerization | [`project/Dockerfile.api`](project/Dockerfile.api), [`project/Dockerfile.mlflow`](project/Dockerfile.mlflow), [`project/monitoring/Dockerfile.monitor`](project/monitoring/Dockerfile.monitor) |
+| Service orchestration | 6-service [`project/docker-compose.yml`](project/docker-compose.yml) with healthchecks and start ordering |
+| Online inference API | FastAPI [`project/web_service.py`](project/web_service.py) — `/predict`, `/predict/batch`, `/model/info` |
+| Input / output validation | Pydantic schemas in [`project/schemas/schemas.py`](project/schemas/schemas.py) |
+| Drift + performance monitoring | Evidently replay worker [`project/monitoring/monitor.py`](project/monitoring/monitor.py) → Postgres → Grafana |
+| Synthetic drift simulation | `DRIFT_*` env vars on the `monitor` service in [`project/docker-compose.yml`](project/docker-compose.yml) |
+| Test suite + coverage gate | [`project/tests/`](project/tests/) (schemas, web service, monitor); CI enforces `--cov-fail-under=60` |
+| Lint / format | [Ruff](https://docs.astral.sh/ruff/) (`ruff check`, `ruff format --check`) |
+| CI gating | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+| Image build + push | [`.github/workflows/docker.yml`](.github/workflows/docker.yml) (CycloneDX SBOM + SLSA provenance attestations) |
+| Release automation | [`.github/workflows/release.yml`](.github/workflows/release.yml) (GitHub Release notes, SBOM asset, digest-preserving image tag promotion) |
+| Manual training in CI | [`.github/workflows/train.yml`](.github/workflows/train.yml) (artifacts: `mlruns/`, `submission.csv`, `optuna_studies.db`) |
+| Secret scanning | [`.github/workflows/secret-scan.yml`](.github/workflows/secret-scan.yml) (Gitleaks, SARIF to Code Scanning) |
+| Branch protection | Required status checks documented in [`docs/CI_CD.md`](docs/CI_CD.md) |
 
 ## Tech stack
 
@@ -13,12 +37,15 @@ The repository root [`main.py`](main.py) is a minimal placeholder. Smaller exerc
 | ML | LightGBM, XGBoost, scikit-learn, pandas, NumPy, seaborn, joblib |
 | Training | Optuna (HPO), MLflow (tracking + registry) |
 | Serving | FastAPI, Pydantic ([`project/schemas/`](project/schemas/schemas.py)) |
+| Monitoring | Evidently, Postgres, Grafana, Adminer |
+| CI/CD | GitHub Actions, GHCR, CycloneDX SBOM, SLSA provenance, Gitleaks |
 | Orchestration | [Prefect](https://www.prefect.io/) is listed as a dependency; the main training path is [`project/train.py`](project/train.py) |
 
 Install dependencies from the repository root:
 
 ```bash
-uv sync
+uv sync               # runtime deps
+uv sync --group dev   # + pytest, pytest-cov, httpx, pip-audit
 ```
 
 ## Repository layout
@@ -28,10 +55,13 @@ uv sync
 | [`project/train.py`](project/train.py) | End-to-end training: load data → feature engineering → Optuna → CV ensemble → register `CustomerChurnEnsemble` → `submission.csv` |
 | [`project/web_service.py`](project/web_service.py) | FastAPI app; loads `models:/CustomerChurnEnsemble@champion` from MLflow |
 | [`project/schemas/`](project/schemas/) | Pydantic request and response models |
-| [`project/docker-compose.yml`](project/docker-compose.yml) | API on **8000**, MLflow on **5001**, Postgres on **5432**, Adminer on **8080**, Grafana on **3000** |
+| [`project/docker-compose.yml`](project/docker-compose.yml) | API on **8000**, MLflow on **5001**, Postgres on **5431→5432**, Adminer on **8080**, Grafana on **3000**, monitor replay worker |
 | [`project/monitoring/`](project/monitoring/) | Evidently-based drift + performance monitoring (Dockerfile, Grafana provisioning, Postgres schema) |
-| [`project/docs/`](project/docs/) | Deep dives: [TRAIN.md](project/docs/TRAIN.md), [WEB_SERVICE.md](project/docs/WEB_SERVICE.md), [SCHEMAS.md](project/docs/SCHEMAS.md), [MONITORING.md](project/docs/MONITORING.md) |
+| [`project/tests/`](project/tests/) | pytest suite — schemas, web service, monitor |
+| [`project/docs/`](project/docs/) | Deep dives: [TRAIN.md](project/docs/TRAIN.md), [WEB_SERVICE.md](project/docs/WEB_SERVICE.md), [SCHEMAS.md](project/docs/SCHEMAS.md), [MONITORING.md](project/docs/MONITORING.md), [TESTS.md](project/docs/TESTS.md) |
+| [`docs/CI_CD.md`](docs/CI_CD.md) | CI/CD architecture: workflow matrix, triggers, gates, branch protection, local reproduction |
 | [`project/customer-churn-eda-multimodelensemble.ipynb`](project/customer-churn-eda-multimodelensemble.ipynb) | EDA and exploratory modeling |
+| [`.github/workflows/`](.github/workflows/) | `ci.yml`, `docker.yml`, `release.yml`, `secret-scan.yml`, `train.yml` |
 
 ## Data
 
@@ -40,78 +70,9 @@ Place your course or competition CSVs under **`project/dataset/`**:
 - `project/dataset/train.csv`
 - `project/dataset/test.csv`
 
-The `dataset/` directory is gitignored ([`.gitignore`](.gitignore)); do not commit raw data.
+The `dataset/` directory is gitignored ([`.gitignore`](.gitignore)); do not commit raw data. The Compose `monitor` service mounts the same files into its container for replay.
 
-## Training (MLflow + `train.py`)
-
-Training expects an MLflow server compatible with the URI configured in [`project/train.py`](project/train.py) (currently **`http://localhost:5001`** for both tracking and registry). Start MLflow on that port, then run:
-
-```bash
-uv run python project/train.py
-```
-
-Typical outputs and artifacts (details in [TRAIN.md](project/docs/TRAIN.md)):
-
-- Registered model name **`CustomerChurnEnsemble`**, with alias **`champion`** when promoted
-- **`project/submission.csv`** (test predictions)
-- **`project/optuna_studies.db`** (Optuna studies)
-- Metrics and artifacts in MLflow (artifact root as configured on the server)
-
-### Docker Compose (MLflow + API + Monitoring)
-
-From `project/`:
-
-```bash
-cd project && docker compose up --build
-```
-
-- MLflow UI / API: **http://localhost:5001**
-- FastAPI: **http://localhost:8000** (sets `MLFLOW_TRACKING_URI=http://mlflow:5001` for the API container)
-- Grafana: **http://localhost:3000** (anonymous viewer; admin / admin to edit)
-- Adminer: **http://localhost:8080** (system `PostgreSQL`, server `postgres`, user/password/db = `monitor`/`monitor`/`monitoring`)
-- Postgres: **localhost:5432** (`postgresql://monitor:monitor@localhost:5432/monitoring`)
-
-The `monitor` service replays `dataset/train.csv` (stratified 80/20 reference split) and `dataset/test.csv` through `/predict/batch` and writes Evidently drift + classification metrics to the `monitoring_metrics` Postgres table. See [project/docs/MONITORING.md](project/docs/MONITORING.md) for the full pipeline, dashboard layout, and tunable env vars.
-
-## Running the API locally
-
-Imports use `from schemas.schemas import …`, so the app must be run with **`project/`** on `PYTHONPATH`, or from inside **`project/`**.
-
-**Option A — change into `project/` (recommended):**
-
-```bash
-cd project
-uv run uvicorn web_service:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Option B — from the repository root:**
-
-```bash
-PYTHONPATH=project uv run uvicorn web_service:app --reload --host 0.0.0.0 --port 8000
-```
-
-Set **`MLFLOW_TRACKING_URI`** if your MLflow server is not the default for your environment (for example `http://localhost:5001` when the API runs on the host and MLflow is exposed on that port). The service loads **`CustomerChurnEnsemble@champion`** at startup; run `train.py` against the same registry first.
-
-Interactive API docs: **http://localhost:8000/docs** (Swagger) and **http://localhost:8000/redoc**.
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/` | Health / info |
-| `POST` | `/predict` | Single customer prediction |
-| `POST` | `/predict/batch` | Batch predictions |
-| `GET` | `/model/info` | Model metadata |
-
-Request and response fields are documented in [SCHEMAS.md](project/docs/SCHEMAS.md).
-
-## Environment variables
-
-| Variable | Used by | Purpose |
-|----------|---------|---------|
-| `MLFLOW_TRACKING_URI` | [`project/web_service.py`](project/web_service.py) | MLflow server for registry and artifacts when loading the model (optional if the default file-based URI matches your setup) |
-
-Training currently sets the tracking URI in code; align your MLflow deployment or edit [`train.py`](project/train.py) if you use a different host or port.
-
-## Architecture (high level)
+## Architecture overview
 
 ```mermaid
 flowchart LR
@@ -132,7 +93,7 @@ flowchart LR
     Pre --> Model
     Model --> API
   end
-  Registry -.->|champion model| Model
+  Registry -.->|champion alias| Model
   subgraph monitoring [Monitoring]
     Monitor[monitor loop]
     PG[(postgres)]
@@ -145,13 +106,266 @@ flowchart LR
   API --> Monitor
 ```
 
-## Development
+Three loosely-coupled components glued together by the MLflow registry and a Postgres metrics table. Training writes a versioned `CustomerChurnEnsemble`; promotion is a registry alias flip, not a redeploy. Serving pulls `@champion` at startup. Monitoring replays held-out and test data through the live API, scores drift with Evidently, and persists time-series metrics that Grafana surfaces.
 
-Formatting and linting: [Ruff](https://docs.astral.sh/ruff/) is available via the project environment, for example:
+## The MLOps pipeline
+
+The next five subsections walk through each stage of the pipeline — training, registry, serving, monitoring, CI/CD — explaining *what* the project does, *why* it matters, and *where* to look in the codebase.
+
+### 1. Training and experimentation
+
+The training pipeline ([`project/train.py`](project/train.py)) is one Python entrypoint that owns the full path from raw CSV to a registry-resident model. Every run is recorded in MLflow as an experiment, so any model in the registry can be traced back to its hyperparameters, fold metrics, code version, and dataset hash.
+
+```mermaid
+flowchart LR
+  CSV[train.csv / test.csv] --> FE[engineer_features]
+  FE --> Opt[Optuna TPE study]
+  Opt -->|best LGBM params| CV
+  Opt -->|best XGB params| CV
+  CV[5-fold stratified CV] --> LGBM[LGBMClassifier × 5]
+  CV --> XGB[XGBClassifier × 5]
+  LGBM --> Wrap
+  XGB --> Wrap
+  Wrap[ChurnEnsemble pyfunc] --> MLflow[(MLflow tracking)]
+  MLflow --> Reg[MLflow registry: CustomerChurnEnsemble]
+  Reg -->|set alias| Champ[@champion]
+```
+
+Key constants and choices, all visible in [`project/train.py`](project/train.py):
+
+- `N_SPLITS = 5`, `RANDOM_STATE = 42` — deterministic fold assignment.
+- Feature engineering derives `AvgMonthlyCharge` and `TotalServices`, one-hot encodes 10 categorical columns, binary-maps 4 yes/no columns, drops `gender`.
+- Optuna TPE sampler with **SQLite-backed** storage (`optuna_studies.db`) so studies survive across runs and can be inspected post-hoc with `optuna-dashboard`.
+- Search space: 9 LightGBM hyperparameters (`n_estimators`, `learning_rate`, `num_leaves`, `max_depth`, `min_child_samples`, `subsample`, `colsample_bytree`, `reg_alpha`, `reg_lambda`), 8 XGBoost equivalents.
+- Per-fold metrics (ROC-AUC, log-loss) are logged to MLflow alongside the best Optuna trial.
+- The 10 trained boosters (5 LGBM + 5 XGB) are wrapped in a single `pyfunc` so serving doesn't need to know about the ensemble shape.
+
+Training expects an MLflow server reachable at the URI hardcoded in `train.py` (currently `http://localhost:5001`). Start MLflow on that port, then:
 
 ```bash
+uv run python project/train.py
+```
+
+Outputs: registered model `CustomerChurnEnsemble`, `project/submission.csv`, `project/optuna_studies.db`, and metrics/artifacts in the MLflow store.
+
+See [`project/docs/TRAIN.md`](project/docs/TRAIN.md) for the full function-by-function walkthrough.
+
+### 2. Model registry and promotion
+
+The project uses **MLflow's post-2.x alias model**, not the deprecated `Staging` / `Production` stage names. Concretely:
+
+- Every successful training run registers a new version of `CustomerChurnEnsemble`.
+- A human operator (or a future promotion workflow) sets the `champion` alias on the version they want serving.
+- The API loads `models:/CustomerChurnEnsemble@champion` at startup — no code change, no redeploy.
+
+This decoupling is the central MLOps payoff of the registry: **promotion is metadata**. To roll back, point `@champion` at the previous version. To shadow-test, introduce a `@challenger` alias and route a percentage of traffic to it.
+
+Promoting via the CLI:
+
+```bash
+mlflow models update --name CustomerChurnEnsemble --version <N> \
+  --alias champion --tracking-uri http://localhost:5001
+```
+
+Or via the MLflow UI: Models → `CustomerChurnEnsemble` → version → "Set alias" → `champion`.
+
+### 3. Serving
+
+The FastAPI app ([`project/web_service.py`](project/web_service.py)) is a thin shell around the pyfunc model. The two responsibilities worth calling out are (a) **startup model load via the registry alias**, and (b) **preprocessing parity with training** — the live request path must apply the exact same feature engineering that `train.py` applied, or the model receives an out-of-distribution input and silently regresses.
+
+```mermaid
+flowchart LR
+  Client[HTTP client] -->|JSON| Validate[Pydantic CustomerData]
+  Validate -->|valid row| Preprocess[engineer_features]
+  Validate -. 422 .-> Client
+  Preprocess --> Predict[ChurnEnsemble pyfunc.predict]
+  Predict --> Response[PredictionResponse JSON]
+  Response --> Client
+  Registry[(MLflow registry @champion)] -.->|lifespan startup| Predict
+```
+
+Endpoints:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`  | `/`              | Health and model metadata |
+| `POST` | `/predict`       | Single customer prediction |
+| `POST` | `/predict/batch` | Batch predictions |
+| `GET`  | `/model/info`    | Registered name, version, alias, URI |
+
+Pydantic schemas ([`project/schemas/schemas.py`](project/schemas/schemas.py)) act as the **contract boundary**: enum-typed categorical fields reject typos with HTTP 422 before they ever reach the model. See [`project/docs/WEB_SERVICE.md`](project/docs/WEB_SERVICE.md) and [`project/docs/SCHEMAS.md`](project/docs/SCHEMAS.md).
+
+Imports use `from schemas.schemas import …`, so the app must be run with **`project/`** on `PYTHONPATH`, or from inside **`project/`**.
+
+```bash
+# Option A — change into project/
+cd project
+uv run uvicorn web_service:app --reload --host 0.0.0.0 --port 8000
+
+# Option B — from the repo root
+PYTHONPATH=project uv run uvicorn web_service:app --reload --host 0.0.0.0 --port 8000
+```
+
+Set `MLFLOW_TRACKING_URI` if your MLflow server is not at the default for your environment. Interactive docs: `http://localhost:8000/docs` (Swagger), `http://localhost:8000/redoc`.
+
+### 4. Monitoring and observability
+
+Production ML systems fail quietly — accuracy degrades, but the API keeps returning 200s. The monitoring stack exists to make that failure mode visible. A replay worker ([`project/monitoring/monitor.py`](project/monitoring/monitor.py)) acts as a synthetic production-traffic generator: it samples batches from a held-out reference pool (80/20 stratified split of `train.csv`) and from `test.csv`, sends them through the live `/predict/batch` endpoint, computes Evidently drift + classification metrics, and writes one row per batch into a Postgres time-series table that Grafana visualizes.
+
+```mermaid
+flowchart LR
+  Pool[train.csv 80/20 + test.csv] --> Sampler[batch sampler]
+  Sampler --> Drift[optional drift injector]
+  Drift -->|HTTP| API[/POST /predict/batch/]
+  API --> Eval[Evidently report]
+  API --> Metrics[sklearn metrics if labels]
+  Eval --> PG[(postgres: monitoring_metrics)]
+  Metrics --> PG
+  PG --> Grafana[Grafana dashboards]
+  PG --> Adminer[Adminer SQL UI]
+```
+
+What lands in Postgres ([`project/monitoring/init.sql`](project/monitoring/init.sql)): one row per batch with timestamps, `data_source`, `batch_id`, `batch_size`, dataset-level drift share, prediction drift, missing-value share, mean predicted churn probability, ground-truth churn rate, and (when labels are available) accuracy, ROC-AUC, and log-loss. Grafana dashboards are auto-provisioned from [`project/monitoring/grafana/`](project/monitoring/grafana/) — no manual import step.
+
+**Synthetic drift injection** is configurable on the `monitor` service in [`project/docker-compose.yml`](project/docker-compose.yml) via `DRIFT_*` env vars:
+
+- `DRIFT_MODE` ∈ `none` | `gradual` | `sustained` | `cycle`
+- Tunable ramp/period, numeric shift magnitude, categorical swap probability, missing-value rate.
+
+This exists so the Grafana dashboards have something interesting to show during a demo — it is explicitly **not** a production feature. Default is `none`.
+
+See [`project/docs/MONITORING.md`](project/docs/MONITORING.md) for the dashboard layout and the full env-var reference.
+
+### 5. CI/CD and release engineering
+
+CI/CD is the part of MLOps that's least about ML and most about ops: tests, image builds, supply-chain attestations, secret scanning, and reproducible releases. Five workflows under [`.github/workflows/`](.github/workflows/):
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| [`ci.yml`](.github/workflows/ci.yml) | push (all branches), PR → main | Ruff lint + format check; pytest on Python 3.13; coverage gate `--cov-fail-under=60`; uploads coverage XML |
+| [`docker.yml`](.github/workflows/docker.yml) | push main, push tag `v*.*.*`, PR → main (build-only), manual | Builds `churn-api`, `churn-mlflow`, `churn-monitor` images in parallel; pushes to GHCR on non-PR events; emits CycloneDX SBOM (`sbom: true`) and SLSA v1 provenance (`provenance: mode=max`) attestations alongside each manifest |
+| [`release.yml`](.github/workflows/release.yml) | push tag `v*.*.*` | Generates GitHub Release with auto-notes since last tag; exports `uv.lock` → CycloneDX SBOM and attaches it as a release asset; uses `docker buildx imagetools create` to re-tag the existing `sha-<short>` image manifest under `:vX.Y.Z`, `:X.Y`, `:X`, `:latest` — **digest is preserved**, so the SBOM/provenance attestations remain valid under all aliases |
+| [`secret-scan.yml`](.github/workflows/secret-scan.yml) | PR → main, push main, weekly cron | Gitleaks scan of full git history (`fetch-depth: 0`); SARIF report uploaded to GitHub Code Scanning; blocks PRs that introduce committed secrets |
+| [`train.yml`](.github/workflows/train.yml) | manual (`workflow_dispatch`) | Provisions dataset (URL input or `TEST_DATASET_URL` secret), spawns local MLflow server, runs full `train.py`, uploads `submission.csv`, `optuna_studies.db`, and the entire `mlruns/` directory as artifacts |
+
+```mermaid
+flowchart LR
+  Push[push / PR] --> CI[ci.yml: lint + tests + cov]
+  Push --> Sec[secret-scan.yml: Gitleaks]
+  Push --> Docker[docker.yml: build 3 images]
+  Docker -->|PR| BuildOnly[no push]
+  Docker -->|main| GHCR[(GHCR :main, :sha)]
+  CI --> Merge{merge to main?}
+  Sec --> Merge
+  Merge -->|yes| Tag[git tag vX.Y.Z]
+  Tag --> Docker2[docker.yml: rebuild + semver push]
+  Tag --> Release[release.yml: GH Release + SBOM + tag promotion]
+  Release --> GHCR2[(GHCR :vX.Y.Z :X.Y :X :latest)]
+  Manual[manual dispatch] -.-> Train[train.yml: full training run]
+  Train --> Artifacts[(mlruns/ + submission.csv)]
+```
+
+**Branch protection** (configured in repo settings, documented in [`docs/CI_CD.md`](docs/CI_CD.md)) requires `ci.yml` checks to pass before merging to `main`. The CI workflow is read-only-token; image push and release write happen only after merge or on a tag.
+
+**Local reproduction of the CI gates** — if these pass locally, CI almost always passes on push:
+
+```bash
+# Lint
 uv run ruff check .
-uv run ruff format .
+
+# Tests + coverage gate (matches ci.yml exactly)
+PYTHONPATH=project uv run pytest project/tests \
+  --cov=project --cov-report=term --cov-fail-under=60
+
+# pip-audit against the locked dependency graph
+uv export --frozen --no-hashes --no-dev -o /tmp/req.txt
+uvx pip-audit --requirement /tmp/req.txt --strict
+
+# Image builds (matches docker.yml builds)
+cd project
+docker compose build api mlflow monitor
+```
+
+See [`docs/CI_CD.md`](docs/CI_CD.md) for the full workflow architecture, trigger reference, branching/release model, image references, secrets, caching strategy, gating logic, and troubleshooting recipes.
+
+## Running the full stack locally
+
+The canonical demo / development environment is the Compose stack from [`project/docker-compose.yml`](project/docker-compose.yml):
+
+```bash
+cd project && docker compose up --build
+```
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| FastAPI | http://localhost:8000 | API container sets `MLFLOW_TRACKING_URI=http://mlflow:5001` |
+| Swagger | http://localhost:8000/docs | Interactive endpoint explorer |
+| MLflow  | http://localhost:5001 | Tracking server + registry UI |
+| Grafana | http://localhost:3000 | Anonymous viewer; `admin` / `admin` to edit |
+| Adminer | http://localhost:8080 | System `PostgreSQL`, server `postgres`, user/password/db = `monitor`/`monitor`/`monitoring` |
+| Postgres | localhost:5431 → 5432 | `postgresql://monitor:monitor@localhost:5431/monitoring` |
+
+The `monitor` service starts replaying as soon as the API and Postgres are healthy. Watch the Grafana dashboards populate over the next few minutes.
+
+## Environment variables
+
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `MLFLOW_TRACKING_URI` | [`project/web_service.py`](project/web_service.py) | MLflow server for registry and artifacts when loading the model. Optional if the default file-based URI matches your setup |
+| `API_URL` | [`project/monitoring/monitor.py`](project/monitoring/monitor.py) | Target API for batch replay (default in Compose: `http://api:8000`) |
+| `BATCH_SIZE`, `INTERVAL_SECONDS`, `REFERENCE_FRAC`, `RUN_ONCE`, `LOOP_FOREVER` | monitor service | Replay loop pacing and dataset partitioning |
+| `DRIFT_MODE`, `DRIFT_START_BATCH`, `DRIFT_RAMP_BATCHES`, `DRIFT_PERIOD_BATCHES`, `DRIFT_NUMERIC_SHIFT`, `DRIFT_CATEGORICAL_SWAP_PROB`, `DRIFT_MISSING_RATE` | monitor service | Synthetic drift injection knobs (see [MONITORING.md](project/docs/MONITORING.md)) |
+| `TEST_DATASET_URL` | [`.github/workflows/train.yml`](.github/workflows/train.yml) | Optional repo secret for fetching the dataset on the CI training runner |
+
+Training currently sets the tracking URI in code; align your MLflow deployment or edit [`project/train.py`](project/train.py) if you use a different host or port.
+
+## Reproducing results end-to-end
+
+```bash
+# 1. Install
+uv sync --group dev
+
+# 2. Drop the dataset in
+mkdir -p project/dataset
+cp /path/to/train.csv project/dataset/
+cp /path/to/test.csv  project/dataset/
+
+# 3. Start MLflow (and the rest, if you want them up)
+cd project
+docker compose up -d mlflow
+
+# 4. Train — produces a new version of CustomerChurnEnsemble
+cd ..
+uv run python project/train.py
+
+# 5. Promote the new version
+mlflow models update --name CustomerChurnEnsemble --version 1 \
+  --alias champion --tracking-uri http://localhost:5001
+
+# 6. Bring up the full stack (API loads @champion at startup)
+cd project && docker compose up --build
+
+# 7. Smoke-test the API
+curl -s http://localhost:8000/ | jq
+curl -s http://localhost:8000/model/info | jq
+
+# 8. Watch Grafana fill in
+open http://localhost:3000
+```
+
+## Development
+
+```bash
+uv run ruff check .          # lint (matches CI)
+uv run ruff format .         # auto-format
+uv run ruff format --check . # CI-style check without modifying files
+```
+
+Run the tests the way CI does (the `PYTHONPATH=project` is required because of how `schemas/` is imported):
+
+```bash
+PYTHONPATH=project uv run pytest project/tests \
+  --cov=project --cov-report=term --cov-fail-under=60
 ```
 
 ## Further reading
@@ -160,536 +374,5 @@ uv run ruff format .
 - [Web service](project/docs/WEB_SERVICE.md) — endpoints, preprocessing parity with training, Docker path handling
 - [Pydantic schemas](project/docs/SCHEMAS.md) — enums and request/response models
 - [Monitoring pipeline](project/docs/MONITORING.md) — Evidently + Postgres + Adminer + Grafana
-
-
-
-
-
-Practical CI/CD Walkthrough
-
-  0. One-time setup (do this once per repo / fork)
-
-  1. Push the new workflows to GitHub:
-  git add .github/workflows/ docs/CI_CD.md CLAUDE.md
-  git commit -m "ci: comprehensive CI/CD pipeline + docs"
-  git push origin ft-ci-cd
-  2. Enable workflow write permissions (required by docker.yml, release.yml):
-    - GitHub → repo → Settings → Actions → General → Workflow permissions
-    - Select Read and write permissions → Save.
-  3. Enable GitHub Code Scanning (so SARIF uploads from Trivy/CodeQL/Gitleaks appear):
-    - Settings → Code security and analysis → enable Code scanning (Default setup is fine; advanced setup is unnecessary because workflows upload SARIF themselves).
-  4. (Optional) Add the training secret:
-    - Settings → Secrets and variables → Actions → New repository secret
-    - Name: TEST_DATASET_URL, Value: a URL to your test.csv.
-  5. Configure branch protection on main (this is what actually makes CI a gate):
-    - Settings → Branches → Branch protection rules → Add rule
-    - Branch name pattern: main
-    - Tick Require status checks to pass before merging and add:
-        - CI / Lint (ruff)
-      - CI / Tests (pytest) (3.13)
-      - Smoke Test / Compose stack smoke
-      - Build and Push Images / Build churn-api
-      - Build and Push Images / Build churn-mlflow
-      - Build and Push Images / Build churn-monitor
-      - Security Scans / pip-audit (uv lockfile)
-      - Secret Scan / Gitleaks
-    - (These names appear after the first run of each workflow — open a throwaway PR first if the dropdown is empty.)
-
-  ---
-  1. Day-to-day: a feature change
-
-  # 1. Branch off main
-  git checkout main && git pull
-  git checkout -b ft-my-change
-
-  # 2. Make changes, then validate locally before pushing
-  uv run ruff check .
-  PYTHONPATH=project uv run pytest project/tests --cov=project --cov-fail-under=60
-
-  # 3. Commit and push — this triggers ci.yml on the feature branch
-  git add -A
-  git commit -m "feat: my change"
-  git push -u origin ft-my-change
-
-  Open the PR (gh pr create or in the UI). On PR open, these run automatically:
-
-  ┌────────────────┬──────────────────────────────┐
-  │    Workflow    │ What you'll see in PR checks │
-  ├────────────────┼──────────────────────────────┤
-  │ ci.yml         │ Lint + tests                 │
-  ├─────────────────┼──────────────────────────────┤
-  │ smoke-test.yml  │ Compose boot                 │
-  ├─────────────────┼──────────────────────────────┤
-  │ docker.yml      │ 3 image builds (no push)     │
-  ├─────────────────┼──────────────────────────────┤
-  │ security.yml    │ pip-audit + 3 Trivy scans    │
-  ├─────────────────┼──────────────────────────────┤
-  │ codeql.yml      │ Python SAST                  │
-  ├─────────────────┼──────────────────────────────┤
-  │ secret-scan.yml │ Gitleaks                     │
-  └─────────────────┴──────────────────────────────┘
-
-  Wait for green. If anything red:
-
-  # Watch the latest run from the CLI
-  gh run watch
-
-  # Tail the failed job's logs
-  gh run view --log-failed
-
-  After merge, on main the same checks rerun and docker.yml now actually pushes images to GHCR.
-
-  ---
-  2. Cutting a release
-
-  # 1. Make sure main is green
-  gh run list --branch main --limit 5
-
-  # 2. Tag and push
-  git checkout main && git pull
-  git tag -a v1.0.0 -m "1.0.0"
-  git push origin v1.0.0
-
-  Two workflows fire automatically off the tag push:
-
-  - docker.yml builds + pushes images tagged v1.0.0, 1.0, 1, latest (with SBOM + provenance).
-  - release.yml then:
-    a. Generates a GitHub Release with auto-generated notes since the previous tag.
-    b. Exports uv.lock → CycloneDX SBOM → attaches sbom-python.cdx.json to the release.
-    c. Re-tags the sha-<short> image manifest under the semver aliases (digest-preserving).
-
-  Verify:
-  gh release view v1.0.0
-  gh release download v1.0.0 -p "sbom-python.cdx.json"
-
-  # Pull a released image
-  docker pull ghcr.io/<your-org-lowercase>/churn-api:1.0.0
-
-  ---
-  3. Running training manually
-
-  UI path:
-  - Actions → Train Model → Run workflow dropdown
-  - Set experiment_name (default ci-training)
-  - Optionally set dataset_url (or rely on the TEST_DATASET_URL secret)
-  - Click Run workflow
-
-  CLI path:
-  gh workflow run train.yml \
-    -f experiment_name=ci-training \
-    -f dataset_url="https://example.com/train.csv"
-   
-  gh run watch              # follow the run
-
-  After it completes, download artifacts:
-  RUN=$(gh run list --workflow train.yml --limit 1 --json databaseId -q '.[0].databaseId')
-  gh run download $RUN -n training-artifacts
-  gh run download $RUN -n mlruns -D ./mlruns
-
-  ---
-  4. Triggering scans on demand
-
-  # Run security scans against current main without waiting for the cron
-  gh workflow run security.yml
-
-  # Same for CodeQL and secrets
-  gh workflow run codeql.yml
-  gh workflow run secret-scan.yml
-
-  Read the results:
-  - Security tab → Code scanning — Trivy, CodeQL, Gitleaks findings (grouped by category set in each workflow).
-  - Actions tab → run → Job summary — Gitleaks markdown summary; pip-audit findings inline in logs.
-
-  ---
-  5. Reproducing CI locally before pushing
-  
-  A copy-pasteable equivalent of every gate (also in docs/CI_CD.md §11):
-
-  # Lint
-  uv run ruff check .
-
-  # Tests + coverage gate (matches ci.yml exactly)
-  PYTHONPATH=project uv run pytest project/tests \
-    --cov=project --cov-report=term --cov-fail-under=60
-
-  # pip-audit (matches security.yml)
-  uv export --frozen --no-hashes --no-dev -o /tmp/req.txt
-  uvx pip-audit --requirement /tmp/req.txt --strict
-
-  # Image builds + smoke (matches smoke-test.yml)
-  cd project
-  docker compose build api mlflow monitor
-  docker compose up -d postgres mlflow
-  docker compose exec -T postgres psql -U monitor -d monitoring -c '\dt monitoring_metrics'
-  curl -fsS http://localhost:5001/health
-  docker compose run --rm --no-deps --entrypoint python api -c "import web_service; print('OK')"
-  docker compose run --rm --no-deps --entrypoint python monitor -c "import monitor; print('OK')"
-  docker compose down -v
-
-  If those all pass locally, CI almost always passes on push.
-
-  ---
-  6. When something breaks — diagnostic recipes
-
-  # What ran on the latest commit?
-  gh run list --branch $(git branch --show-current) --limit 10
-
-  # Failed job logs
-  gh run view <run-id> --log-failed
-
-  # Re-run only the failed jobs
-  gh run rerun <run-id> --failed
-
-  # Cancel a stuck run (e.g. training timeout)
-  gh run cancel <run-id>
-
-  Specific failure modes are catalogued in docs/CI_CD.md §12 (postgres init-volume issues, GHCR 403s, release-promotion missing source tag, etc.).
-
-  ---
-  TL;DR cheat sheet
-
-  ┌────────────────────────────┬────────────────────────────────────────────────────────┐
-  │        You want to…        │                         You do                         │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ See what CI runs on a push │ gh run list                                            │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ Run training               │ gh workflow run train.yml                              │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ Cut a release              │ git tag -a vX.Y.Z -m "X.Y.Z" && git push origin vX.Y.Z │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ Force a security scan now  │ gh workflow run security.yml                           │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ Reproduce CI locally       │ the block in §5                                        │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ Find a CVE finding         │ repo Security tab → Code scanning                      │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ Download a trained model   │ gh run download <id> -n mlruns                         │
-  └────────────────────────────┴────────────────────────────────────────────────────────┘
-
-✻ Churned for 42s
-
-⏺ The Trivy action diagnostic is a linter false positive — the action and
-  version both exist; this is the version that was already in the working
-  file. Continuing with the secret scan workflow.
-
-⏺ Write(.github/workflows/secret-scan.yml)
-  ⎿  Wrote 66 lines to .github/workflows/secret-scan.yml
-       1 # ──────────────────────────────────────────────────────────────
-       3 # ──────────────────────────────────────────────────────────────
-     ───────────────
-       5 # Detects committed secrets (AWS keys, GitHub tokens, generic
-     high-entropy
-       6 # strings matching curated patterns) in the diff. Complements
-       8 # secret scanning by:
-       9 #   - running on every PR before merge (built-in secret scanning
-      10 #     catches secrets matching partner providers, and only
-     post-push)
-     … +78 lines (ctrl+o to expand)
-
-  Searched for 2 patterns (ctrl+o to expand)
-
-⏺ Write(.github/workflows/smoke-test.yml)
-  ⎿  Wrote 176 lines to .github/workflows/smoke-test.yml
-       1 # ──────────────────────────────────────────────────────────────
-       2 # Smoke test — boot a partial stack to prove the images
-       3 # ──────────────────────────────────────────────────────────────
-       4 #──────────
-       5 # Unit tests prove individual modules work. Security scans prove
-       6 # CVEs. Neither catches "this image was built but immediately
-       7 # startup", or "the postgres init.sql doesn't create the schema
-       8 # expects", or "the API image is missing an OS package that one
-       9 # Python wheels dlopen's at import time."
-      10 #
-     … +238 lines (ctrl+o to expand)
-
-⏺ Now the comprehensive docs file.
-
-⏺ Write(docs/CI_CD.md)
-  ⎿  Wrote 412 lines to docs/CI_CD.md
-       2 # CI/CD Architecture
-       3 This document describes the continuous-integration and
-       4 setup for the Customer Churn Prediction stack. It is the source
-     of truth
-       5 for **what runs when, why each job exists, what it gates, and
-       6 extend or debug it**. The workflow YAML files in
-       7 heavily commented and are the second source — this document is
-     the
-       9 big-picture view that those comments can't easily express.
-      10 ---
-     … +516 lines (ctrl+o to expand)
-
-⏺ Quick verification — list final workflow state.
-
-  Listed 1 directory (ctrl+o to expand)
-
-⏺ Done. Here's what landed:
-
-  Rewritten (with heavy inline documentation):
-  - .github/workflows/ci.yml — lint + tests + coverage; comments explain the
-  uv caching strategy, why lint gates tests, and the PYTHONPATH=project
-  belt-and-braces.
-  - .github/workflows/docker.yml — adds sbom: true and provenance: mode=max to
-   every image build; comments cover GHCR auth, the tag rule precedence, and
-  why PRs build-but-don't-push.
-  - .github/workflows/release.yml — adds CycloneDX SBOM generation from
-  uv.lock and attaches it to the GitHub Release; comments explain why we
-  re-tag via imagetools rather than rebuilding (digest stability for
-  SBOM/provenance attestations).
-  - .github/workflows/security.yml — same pip-audit + Trivy, but documents the
-   soft/hard gate split and SARIF category usage.
-  - .github/workflows/train.yml — manual training, now documented end-to-end
-  including the MLflow-as-background-process pattern and the TEST_DATASET_URL
-  secret.
-
-  New workflows:
-  - .github/workflows/codeql.yml — Python SAST with the security-extended
-  query suite, weekly cron + per-PR.
-  - .github/workflows/secret-scan.yml — Gitleaks on full history (fetch-depth:
-   0) so historical secrets surface even if removed from HEAD.
-  - .github/workflows/smoke-test.yml — docker compose build, boot
-  postgres+mlflow, verify monitoring_metrics exists and MLflow /health
-  responds, then import-only smoke for the api/monitor images (the api can't
-  fully boot in CI without a champion model — explained in the file header).
-
-  Documentation:
-  - docs/CI_CD.md — 13-section architecture doc: goals, pipeline diagram,
-  workflow matrix, trigger reference, branching/release model, image
-  references, secrets, caching, gating logic, training workflow, local
-  reproduction, troubleshooting, extension recipes.
-
-  Two notes:
-  - The aquasecurity/trivy-action@0.28.0 diagnostic the IDE shows is a linter
-  false positive — that exact version was already in the working file and
-  exists on the marketplace.
-  - train.yml still surfaces a warning about secrets.TEST_DATASET_URL being
-  potentially undefined; that's intentional (the script handles its absence).
-
-✻ Brewed for 9m 3s
-
-❯ give me a step by step guide on how to run the CI/CD practically            
-
-⏺ Practical CI/CD Walkthrough
-
-  0. One-time setup (do this once per repo / fork)
-
-  1. Push the new workflows to GitHub:
-  git add .github/workflows/ docs/CI_CD.md CLAUDE.md
-  git commit -m "ci: comprehensive CI/CD pipeline + docs"
-  git push origin ft-ci-cd
-  2. Enable workflow write permissions (required by docker.yml, release.yml):
-    - GitHub → repo → Settings → Actions → General → Workflow permissions
-    - Select Read and write permissions → Save.
-  3. Enable GitHub Code Scanning (so SARIF uploads from Trivy/CodeQL/Gitleaks
-  appear):
-    - Settings → Code security and analysis → enable Code scanning (Default
-  setup is fine; advanced setup is unnecessary because workflows upload SARIF
-  themselves).
-  4. (Optional) Add the training secret:
-    - Settings → Secrets and variables → Actions → New repository secret
-    - Name: TEST_DATASET_URL, Value: a URL to your test.csv.
-  5. Configure branch protection on main (this is what actually makes CI a
-  gate):
-    - Settings → Branches → Branch protection rules → Add rule
-    - Branch name pattern: main
-    - Tick Require status checks to pass before merging and add:
-        - CI / Lint (ruff)
-      - CI / Tests (pytest) (3.13)
-      - Smoke Test / Compose stack smoke
-      - Build and Push Images / Build churn-api
-      - Build and Push Images / Build churn-mlflow
-      - Build and Push Images / Build churn-monitor
-      - Security Scans / pip-audit (uv lockfile)
-      - Secret Scan / Gitleaks
-    - (These names appear after the first run of each workflow — open a
-  throwaway PR first if the dropdown is empty.)
-
-  ---
-  1. Day-to-day: a feature change
-
-  # 1. Branch off main
-  git checkout main && git pull
-  git checkout -b ft-my-change
-
-  # 2. Make changes, then validate locally before pushing
-  uv run ruff check .
-  PYTHONPATH=project uv run pytest project/tests --cov=project
-  --cov-fail-under=60
-
-  # 3. Commit and push — this triggers ci.yml on the feature branch
-  git add -A
-  git commit -m "feat: my change"
-  git push -u origin ft-my-change
-
-  Open the PR (gh pr create or in the UI). On PR open, these run
-  automatically:
-
-  ┌─────────────────┬──────────────────────────────┐
-  │    Workflow     │ What you'll see in PR checks │
-  ├─────────────────┼──────────────────────────────┤
-  │ ci.yml          │ Lint + tests                 │
-  ├─────────────────┼──────────────────────────────┤
-  │ smoke-test.yml  │ Compose boot                 │
-  ├─────────────────┼──────────────────────────────┤
-  │ docker.yml      │ 3 image builds (no push)     │
-  ├─────────────────┼──────────────────────────────┤
-  │ security.yml    │ pip-audit + 3 Trivy scans    │
-  ├─────────────────┼──────────────────────────────┤
-  │ codeql.yml      │ Python SAST                  │
-  ├─────────────────┼──────────────────────────────┤
-  │ secret-scan.yml │ Gitleaks                     │
-  └─────────────────┴──────────────────────────────┘
-
-  Wait for green. If anything red:
-
-  # Watch the latest run from the CLI
-  gh run watch
-
-  # Tail the failed job's logs
-  gh run view --log-failed
-
-  After merge, on main the same checks rerun and docker.yml now actually
-  pushes images to GHCR.
-
-  ---
-  2. Cutting a release
-
-  # 1. Make sure main is green
-  gh run list --branch main --limit 5
-
-  # 2. Tag and push
-  git checkout main && git pull
-  git tag -a v1.0.0 -m "1.0.0"
-  git push origin v1.0.0
-
-  Two workflows fire automatically off the tag push:
-
-  - docker.yml builds + pushes images tagged v1.0.0, 1.0, 1, latest (with SBOM
-   + provenance).
-  - release.yml then:
-    a. Generates a GitHub Release with auto-generated notes since the previous
-   tag.
-    b. Exports uv.lock → CycloneDX SBOM → attaches sbom-python.cdx.json to the
-   release.
-    c. Re-tags the sha-<short> image manifest under the semver aliases
-  (digest-preserving).
-
-  Verify:
-  gh release view v1.0.0
-  gh release download v1.0.0 -p "sbom-python.cdx.json"
-
-  # Pull a released image
-  docker pull ghcr.io/<your-org-lowercase>/churn-api:1.0.0
-
-  ---
-  3. Running training manually
-
-  UI path:
-  - Actions → Train Model → Run workflow dropdown
-  - Set experiment_name (default ci-training)
-  - Optionally set dataset_url (or rely on the TEST_DATASET_URL secret)
-  - Click Run workflow
-
-  CLI path:
-  gh workflow run train.yml \
-    -f experiment_name=ci-training \
-    -f dataset_url="https://example.com/train.csv"
-
-  gh run watch              # follow the run
-
-  After it completes, download artifacts:
-  RUN=$(gh run list --workflow train.yml --limit 1 --json databaseId -q
-  '.[0].databaseId')
-  gh run download $RUN -n training-artifacts
-  gh run download $RUN -n mlruns -D ./mlruns
-
-  ---
-  4. Triggering scans on demand
-
-  # Run security scans against current main without waiting for the cron
-  gh workflow run security.yml
-
-  # Same for CodeQL and secrets
-  gh workflow run codeql.yml
-  gh workflow run secret-scan.yml
-
-  Read the results:
-  - Security tab → Code scanning — Trivy, CodeQL, Gitleaks findings (grouped
-  by category set in each workflow).
-  - Actions tab → run → Job summary — Gitleaks markdown summary; pip-audit
-  findings inline in logs.
-
-  ---
-  5. Reproducing CI locally before pushing
-
-  A copy-pasteable equivalent of every gate (also in docs/CI_CD.md §11):
-
-  # Lint
-  uv run ruff check .
-
-  # Tests + coverage gate (matches ci.yml exactly)
-  PYTHONPATH=project uv run pytest project/tests \
-    --cov=project --cov-report=term --cov-fail-under=60
-
-  # pip-audit (matches security.yml)
-  uv export --frozen --no-hashes --no-dev -o /tmp/req.txt
-  uvx pip-audit --requirement /tmp/req.txt --strict
-
-  # Image builds + smoke (matches smoke-test.yml)
-  cd project
-  docker compose build api mlflow monitor
-  docker compose up -d postgres mlflow
-  docker compose exec -T postgres psql -U monitor -d monitoring -c '\dt
-  monitoring_metrics'
-  curl -fsS http://localhost:5001/health
-  docker compose run --rm --no-deps --entrypoint python api -c "import
-  web_service; print('OK')"
-  docker compose run --rm --no-deps --entrypoint python monitor -c "import
-  monitor; print('OK')"
-  docker compose down -v
-
-  If those all pass locally, CI almost always passes on push.
-
-  ---
-  6. When something breaks — diagnostic recipes
-
-  # What ran on the latest commit?
-  gh run list --branch $(git branch --show-current) --limit 10
-
-  # Failed job logs
-  gh run view <run-id> --log-failed
-
-  # Re-run only the failed jobs
-  gh run rerun <run-id> --failed
-
-  # Cancel a stuck run (e.g. training timeout)
-  gh run cancel <run-id>
-
-  Specific failure modes are catalogued in docs/CI_CD.md §12 (postgres
-  init-volume issues, GHCR 403s, release-promotion missing source tag, etc.).
-
-  ---
-  TL;DR cheat sheet
-
-  ┌────────────────────────┬──────────────────────────────────────────────┐
-  │      You want to…      │                    You do                    │
-  ├────────────────────────┼──────────────────────────────────────────────┤
-  │ See what CI runs on a  │ gh run list                                  │
-  │ push                   │                                              │
-  ├────────────────────────┼──────────────────────────────────────────────┤
-  │ Run training           │ gh workflow run train.yml                    │
-  ├────────────────────────┼──────────────────────────────────────────────┤
-  │ Cut a release          │ git tag -a vX.Y.Z -m "X.Y.Z" && git push     │
-  │                        │ origin vX.Y.Z                                │
-  ├────────────────────────┼──────────────────────────────────────────────┤
-  │ Force a security scan  │ gh workflow run security.yml                 │
-  │ now                    │                                              │
-  ├────────────────────────┼──────────────────────────────────────────────┤
-  │ Reproduce CI locally   │ the block in §5                              │
-  ├────────────────────────┼──────────────────────────────────────────────┤
-  │ Find a CVE finding     │ repo Security tab → Code scanning            │
-  ├────────────────────────┼──────────────────────────────────────────────┤
-  │ Download a trained     │ gh run download <id> -n mlruns               │
-  │ Find a CVE finding         │ repo Security tab → Code scanning                      │
-  ├────────────────────────────┼────────────────────────────────────────────────────────┤
-  │ Download a trained model   │ gh run download <id> -n mlruns                         │
-  └────────────────────────────┴────────────────────────────────────────────────────────┘
+- [Test suite](project/docs/TESTS.md) — fixtures, mocks, what each module covers
+- [CI/CD architecture](docs/CI_CD.md) — workflow matrix, triggers, branch protection, troubleshooting
