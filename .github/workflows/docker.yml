@@ -135,7 +135,7 @@ jobs:
         # the login would fail. The build step below also disables `push` on
         # PRs, so this skip is the right one.
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
