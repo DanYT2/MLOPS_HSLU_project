@@ -61,7 +61,7 @@ jobs:
       MLFLOW_TRACKING_URI: http://127.0.0.1:5001
       MLFLOW_EXPERIMENT_NAME: ${{ inputs.experiment_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
