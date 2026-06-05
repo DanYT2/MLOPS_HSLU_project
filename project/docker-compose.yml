@@ -53,7 +53,11 @@ services:
     volumes:
       # Persist the SQLite backend store and artifact directory between container
       # restarts so experiment metadata and model artifacts survive rebuilds.
-      - ./mlflow.db:/mlflow/mlflow.db
+      # The backend store is a named volume (a directory) rather than a single-file
+      # bind mount: bind-mounting ./mlflow.db breaks when the host file is absent,
+      # because Docker then auto-creates an empty *directory* there and SQLite
+      # fails with "unable to open database file".
+      - mlflow-db:/mlflow/db
       - ./mlruns:/mlflow/mlruns
 
   # Metrics database for the monitoring pipeline. The monitor writes one row per
@@ -183,3 +187,4 @@ volumes:
   # database files inside the repository.
   pgdata:
   grafana-data:
+  mlflow-db:

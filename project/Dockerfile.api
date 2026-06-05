@@ -3,7 +3,7 @@
 # This image focuses on serving only: it installs the project dependencies,
 # copies the API entrypoint and request/response schemas, and starts FastAPI on
 # port 8000 for docker-compose and local browser/curl access.
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 # LightGBM and related compiled ML packages need OpenMP runtime support. The
 # package lists are removed afterward to keep the image lean.
