@@ -376,3 +376,9 @@ PYTHONPATH=project uv run pytest project/tests \
 - [Monitoring pipeline](project/docs/MONITORING.md) — Evidently + Postgres + Adminer + Grafana
 - [Test suite](project/docs/TESTS.md) — fixtures, mocks, what each module covers
 - [CI/CD architecture](docs/CI_CD.md) — workflow matrix, triggers, branch protection, troubleshooting
+
+## Use of AI assistance
+
+AI tools were used during the development of this project as an **assistive and advisory aid** — to draft and refine documentation, scaffold and review code, surface alternative approaches, and help with debugging. The primary assistant was Anthropic's Claude, used via the Claude Code CLI.
+
+All substantive decisions were made by the author. Architecture, model and library selection, the cross-validation and hyperparameter-optimization strategy, evaluation methodology, the monitoring and CI/CD design, and the final implementation reflect the author's own judgement. Every AI-generated suggestion was reviewed, tested, and then accepted, modified, or rejected at the author's discretion — AI guided the work but did not direct it. The author takes full responsibility for the content, correctness, and academic integrity of this repository.
