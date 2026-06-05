@@ -10,6 +10,7 @@ dependencies = [
     "ipykernel>=7.2.0",
     "joblib>=1.4.2",
     "lightgbm>=4.6.0",
+    "markitdown[all]>=0.1.5",
     "mlflow>=3.10.0",
     "optuna>=4.7.0",
     "prefect>=3.6.22",
