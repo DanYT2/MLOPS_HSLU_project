@@ -80,7 +80,7 @@ jobs:
             --output-file sbom-python.cdx.json
 
       - name: Generate release notes and publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # generate_release_notes uses GitHub's API to build the changelog
           # from PR titles and labels since the previous tag — see
