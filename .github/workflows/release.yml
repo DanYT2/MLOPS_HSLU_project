@@ -46,7 +46,7 @@ jobs:
     name: Create GitHub release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # fetch-depth: 0 pulls the full commit history. softprops/action-gh-release
           # needs at least the previous tag's commit to compute "what changed
