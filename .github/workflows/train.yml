@@ -128,7 +128,7 @@ jobs:
         # `if: always()` so partial outputs from a failed training run are
         # still recoverable for debugging.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: training-artifacts
           path: |
@@ -141,7 +141,7 @@ jobs:
         # Uploaded separately because it's typically the largest artifact
         # and we want it independently downloadable.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mlruns
           path: mlruns
